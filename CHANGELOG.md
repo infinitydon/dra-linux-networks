@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.9
+
+- Move the example `lan-88` IPPool out of the Helm release.
+- Make IPPool instances explicitly operator-managed resources.
+- Run two controller replicas by default with Lease-based leader election.
+- Add leader-election health checks, namespaced RBAC, replica spreading, and a PDB.
+
 ## v0.1.8
 
 - Require static Pod annotations to include an explicit `IPPool` reference.

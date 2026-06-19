@@ -9,5 +9,5 @@ data:
     {
       "driverName": {{ .Values.driverName | quote }},
       "interfaces": {{ .Values.interfaces | toJson }},
-      "ipPools": {{ .Values.ipPools | toJson }}
+      "ipPools": []
     }

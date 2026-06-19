@@ -41,3 +41,31 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "linux-net-dra.fullname" . }}
     namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "linux-net-dra.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "linux-net-dra.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "linux-net-dra.fullname" . }}-leader-election
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "linux-net-dra.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "linux-net-dra.fullname" . }}-leader-election
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "linux-net-dra.fullname" . }}
+    namespace: {{ .Release.Namespace }}

@@ -1,0 +1,16 @@
+{{- if and .Values.controller.enabled (gt (int .Values.controller.replicas) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "linux-net-dra.fullname" . }}-controller
+  labels:
+    {{- include "linux-net-dra.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "linux-net-dra.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: controller
+{{- end }}

@@ -1,4 +1,4 @@
-IMAGE ?= ghcr.io/infinitydon/dra-linux-networks:0.1.8
+IMAGE ?= ghcr.io/infinitydon/dra-linux-networks:0.1.9
 STATIC_ADDRESS ?= 192.168.88.10/24
 GATEWAY ?= 192.168.88.1
 

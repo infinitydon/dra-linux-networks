@@ -50,6 +50,12 @@ helm upgrade --install linux-net-dra ./deployments/helm/linux-net-dra \
   --namespace kube-system
 ```
 
+Create environment-specific pools separately from the chart release:
+
+```bash
+kubectl apply -f examples/ippool-lan-88.yaml
+```
+
 By default the chart advertises `enp8s20`:
 
 ```yaml
@@ -65,7 +71,8 @@ interfaces:
     mtu: 9000
 ```
 
-The chart also installs the `IPPool` CRD and creates a default pool:
+The chart installs the `IPPool` CRD but does not create any pool instances.
+The example pool is operator-owned and contains:
 
 ```yaml
 apiVersion: linux-net.dra.infinitydon.com/v1alpha1
@@ -101,6 +108,14 @@ The controller runs independently of the node plugins. It deletes allocations
 whose referenced `ResourceClaim` no longer exists or whose claim UID has changed,
 and reports `allocated`, `dynamicAllocated`, and `staticAllocated` counts in
 `IPPool.status`. The local node state file is not used for cluster-wide locking.
+
+The chart runs two controller replicas by default. They use a
+`coordination.k8s.io/v1` Lease so only the elected leader reconciles allocations;
+standby replicas remain ready for failover. Leader-election health is included in
+the liveness endpoint. Configuration follows the stable client-go `LeaseLock`
+pattern rather than alpha Coordinated Leader Election. See the Kubernetes
+[Lease documentation](https://kubernetes.io/docs/concepts/architecture/leases/)
+and [client-go leader election API](https://pkg.go.dev/k8s.io/client-go/tools/leaderelection).
 
 ## Multi-node test
 

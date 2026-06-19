@@ -1,0 +1,15 @@
+apiVersion: linux-net.dra.infinitydon.com/v1alpha1
+kind: IPPool
+metadata:
+  name: lan-88
+spec:
+  subnet: 192.168.88.0/24
+  allocations:
+    - name: dynamic
+      rangeStart: 192.168.88.11
+      rangeEnd: 192.168.88.15
+  reservations:
+    - name: static
+      addresses:
+        - 192.168.88.10
+  gateway: 192.168.88.1

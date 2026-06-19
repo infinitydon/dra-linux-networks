@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.1.8"
+  tag: "0.1.9"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -14,8 +14,15 @@ priorityClassName: system-node-critical
 
 controller:
   enabled: true
-  replicas: 1
+  replicas: 2
   reconcileInterval: 30s
+  leaderElection:
+    enabled: true
+    leaseName: linux-net-dra-controller
+    leaseDuration: 15s
+    renewDeadline: 10s
+    retryPeriod: 2s
+    healthTimeout: 20s
   nodeSelector: {}
   tolerations: []
 
@@ -29,19 +36,6 @@ nri:
 state:
   hostPath: /var/run/linux-net-dra
   file: /var/run/linux-net-dra/state.json
-
-ipPools:
-  - name: lan-88
-    subnet: 192.168.88.0/24
-    allocations:
-      - name: dynamic
-        rangeStart: 192.168.88.11
-        rangeEnd: 192.168.88.15
-    reservations:
-      - name: static
-        addresses:
-          - 192.168.88.10
-    gateway: 192.168.88.1
 
 interfaces:
   - name: enp8s20
