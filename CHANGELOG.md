@@ -7,6 +7,7 @@
 - Emit Pod Events for network preparation, attachment, and attachment failures.
 - Add opt-in `linux-net.dra.infinitydon.com/NetworkReady` readiness-gate support.
 - Extend multi-node e2e coverage to assert status, Events, and readiness.
+- Remove the overlapping bidirectional `/run` mount that could leak propagated mounts.
 
 ## v0.1.9
 

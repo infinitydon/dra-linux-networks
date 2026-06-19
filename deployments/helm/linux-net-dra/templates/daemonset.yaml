@@ -75,9 +75,6 @@ spec:
             - name: netns
               mountPath: /var/run/netns
               mountPropagation: Bidirectional
-            - name: host-run
-              mountPath: /run
-              mountPropagation: Bidirectional
       volumes:
         - name: config
           configMap:
@@ -102,7 +99,3 @@ spec:
           hostPath:
             path: /var/run/netns
             type: DirectoryOrCreate
-        - name: host-run
-          hostPath:
-            path: /run
-            type: Directory
