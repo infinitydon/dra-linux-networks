@@ -284,7 +284,7 @@ func (d *Driver) RunPodSandbox(_ context.Context, pod *api.PodSandbox) error {
 }
 
 func (d *Driver) StopPodSandbox(_ context.Context, pod *api.PodSandbox) error {
-	klog.Infof("pod sandbox stopped", "namespace", pod.GetNamespace(), "name", pod.GetName(), "uid", pod.GetUid())
+	klog.InfoS("pod sandbox stopped", "namespace", pod.GetNamespace(), "name", pod.GetName(), "uid", pod.GetUid())
 	return nil
 }
 
