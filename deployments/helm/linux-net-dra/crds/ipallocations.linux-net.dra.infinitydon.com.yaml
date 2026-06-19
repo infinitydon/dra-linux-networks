@@ -1,0 +1,94 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ipallocations.linux-net.dra.infinitydon.com
+spec:
+  group: linux-net.dra.infinitydon.com
+  scope: Cluster
+  names:
+    plural: ipallocations
+    singular: ipallocation
+    kind: IPAllocation
+    listKind: IPAllocationList
+    shortNames:
+      - lnipa
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Pool
+          type: string
+          jsonPath: .spec.poolRef
+        - name: Address
+          type: string
+          jsonPath: .spec.address
+        - name: Type
+          type: string
+          jsonPath: .spec.allocationType
+        - name: Namespace
+          type: string
+          jsonPath: .spec.claimRef.namespace
+        - name: Claim
+          type: string
+          jsonPath: .spec.claimRef.name
+        - name: Node
+          type: string
+          jsonPath: .spec.nodeName
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - poolRef
+                - address
+                - allocationType
+                - claimRef
+                - podRef
+                - nodeName
+              x-kubernetes-validations:
+                - rule: self == oldSelf
+                  message: IPAllocation spec is immutable
+              properties:
+                poolRef:
+                  type: string
+                  minLength: 1
+                address:
+                  type: string
+                  minLength: 1
+                allocationType:
+                  type: string
+                  enum:
+                    - Dynamic
+                    - Static
+                claimRef:
+                  type: object
+                  required:
+                    - namespace
+                    - name
+                    - uid
+                  properties:
+                    namespace:
+                      type: string
+                    name:
+                      type: string
+                    uid:
+                      type: string
+                podRef:
+                  type: object
+                  required:
+                    - namespace
+                    - name
+                    - uid
+                  properties:
+                    namespace:
+                      type: string
+                    name:
+                      type: string
+                    uid:
+                      type: string
+                nodeName:
+                  type: string
+                  minLength: 1

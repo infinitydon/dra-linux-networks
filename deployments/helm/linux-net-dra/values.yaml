@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.1.6"
+  tag: "0.1.7"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -11,6 +11,13 @@ nodeSelector:
 tolerations: []
 
 priorityClassName: system-node-critical
+
+controller:
+  enabled: true
+  replicas: 1
+  reconcileInterval: 30s
+  nodeSelector: {}
+  tolerations: []
 
 kubelet:
   pluginsDir: /var/lib/kubelet/plugins

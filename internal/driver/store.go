@@ -128,11 +128,6 @@ func (s *Store) ReserveIP(pool, address string, claimUID, podUID types.UID) erro
 		}
 		return errors.New("claim already has a different IP allocation")
 	}
-	for _, allocation := range s.IPAllocations {
-		if allocation.Pool == pool && allocation.Address == address {
-			return errors.New("IP address is already allocated")
-		}
-	}
 	s.IPAllocations[claimUID] = IPAllocation{
 		Pool:     pool,
 		Address:  address,
@@ -147,17 +142,6 @@ func (s *Store) AllocationForClaim(claimUID types.UID) (IPAllocation, bool) {
 	defer s.mu.Unlock()
 	allocation, ok := s.IPAllocations[claimUID]
 	return allocation, ok
-}
-
-func (s *Store) IsIPAllocated(pool, address string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, allocation := range s.IPAllocations {
-		if allocation.Pool == pool && allocation.Address == address {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Store) persistLocked() error {

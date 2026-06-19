@@ -71,6 +71,15 @@ spec:
             status:
               type: object
               properties:
+                allocated:
+                  type: integer
+                  format: int64
+                dynamicAllocated:
+                  type: integer
+                  format: int64
+                staticAllocated:
+                  type: integer
+                  format: int64
                 conditions:
                   type: array
                   x-kubernetes-list-type: map

@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"net"
 
-	"k8s.io/apimachinery/pkg/types"
+	corev1 "k8s.io/api/core/v1"
+	resourceapi "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/infinitydon/dra-linux-networks/internal/config"
+	"github.com/infinitydon/dra-linux-networks/internal/ipamapi"
 )
 
-func (d *Driver) applyIPAM(ctx context.Context, netCfg *NetworkConfig, claimUID, podUID types.UID) error {
+func (d *Driver) applyIPAM(ctx context.Context, netCfg *NetworkConfig, claim *resourceapi.ResourceClaim, pod *corev1.Pod) error {
 	if netCfg.IPPool == "" {
 		return nil
 	}
@@ -33,11 +36,22 @@ func (d *Driver) applyIPAM(ctx context.Context, netCfg *NetworkConfig, claimUID,
 	}
 
 	address := netCfg.Address
-	if allocation, ok := d.store.AllocationForClaim(claimUID); ok {
+	if allocation, ok, err := ipamapi.FindForClaim(ctx, d.dynamic, claim.UID); err != nil {
+		return fmt.Errorf("find allocation for claim %s/%s: %w", claim.Namespace, claim.Name, err)
+	} else if ok {
+		if allocation.Pool != pool.Name {
+			return fmt.Errorf("claim %s/%s already has an allocation from pool %s", claim.Namespace, claim.Name, allocation.Pool)
+		}
 		address = allocation.Address
+		if err := d.store.ReserveIP(pool.Name, address, claim.UID, pod.UID); err != nil {
+			return err
+		}
+		netCfg.Address = address
+		netCfg.Addresses = []string{address}
+		return applyPoolRoutes(netCfg, pool)
 	}
 	if address == "" {
-		address, err = d.nextFreeAddress(pool, subnet)
+		address, err = d.reserveDynamicAddress(ctx, pool, subnet, claim, pod)
 		if err != nil {
 			return err
 		}
@@ -50,13 +64,23 @@ func (d *Driver) applyIPAM(ctx context.Context, netCfg *NetworkConfig, claimUID,
 		if !ipInRanges(ip.To4(), pool.Reservations) {
 			return fmt.Errorf("requested static address %s is not reserved in pool %s", address, pool.Name)
 		}
+		if err := d.reserveClusterAddress(ctx, pool.Name, address, "Static", claim, pod); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				return fmt.Errorf("static address %s is already allocated", address)
+			}
+			return fmt.Errorf("reserve static address %s: %w", address, err)
+		}
 	}
 
-	if err := d.store.ReserveIP(pool.Name, address, claimUID, podUID); err != nil {
+	if err := d.store.ReserveIP(pool.Name, address, claim.UID, pod.UID); err != nil {
 		return fmt.Errorf("reserve %s from pool %s: %w", address, pool.Name, err)
 	}
 	netCfg.Address = address
 	netCfg.Addresses = []string{address}
+	return applyPoolRoutes(netCfg, pool)
+}
+
+func applyPoolRoutes(netCfg *NetworkConfig, pool config.IPPool) error {
 	if len(netCfg.Routes) == 0 {
 		for _, route := range pool.Routes {
 			netCfg.Routes = append(netCfg.Routes, Route{
@@ -68,7 +92,7 @@ func (d *Driver) applyIPAM(ctx context.Context, netCfg *NetworkConfig, claimUID,
 	return nil
 }
 
-func (d *Driver) nextFreeAddress(pool config.IPPool, subnet *net.IPNet) (string, error) {
+func (d *Driver) reserveDynamicAddress(ctx context.Context, pool config.IPPool, subnet *net.IPNet, claim *resourceapi.ResourceClaim, pod *corev1.Pod) (string, error) {
 	ones, _ := subnet.Mask.Size()
 	for _, allocationRange := range pool.Allocations {
 		for _, ip := range expandIPRange(allocationRange) {
@@ -76,8 +100,12 @@ func (d *Driver) nextFreeAddress(pool config.IPPool, subnet *net.IPNet) (string,
 				continue
 			}
 			address := fmt.Sprintf("%s/%d", ip.String(), ones)
-			if !d.store.IsIPAllocated(pool.Name, address) {
+			err := d.reserveClusterAddress(ctx, pool.Name, address, "Dynamic", claim, pod)
+			if err == nil {
 				return address, nil
+			}
+			if !apierrors.IsAlreadyExists(err) {
+				return "", fmt.Errorf("reserve dynamic address %s: %w", address, err)
 			}
 			if ipToUint32(ip) == ^uint32(0) {
 				break
@@ -85,6 +113,26 @@ func (d *Driver) nextFreeAddress(pool config.IPPool, subnet *net.IPNet) (string,
 		}
 	}
 	return "", fmt.Errorf("pool %s has no free addresses", pool.Name)
+}
+
+func (d *Driver) reserveClusterAddress(ctx context.Context, pool, address, allocationType string, claim *resourceapi.ResourceClaim, pod *corev1.Pod) error {
+	_, err := ipamapi.Reserve(ctx, d.dynamic, ipamapi.Allocation{
+		Pool:           pool,
+		Address:        address,
+		AllocationType: allocationType,
+		Claim: ipamapi.ObjectReference{
+			Namespace: claim.Namespace,
+			Name:      claim.Name,
+			UID:       claim.UID,
+		},
+		Pod: ipamapi.ObjectReference{
+			Namespace: pod.Namespace,
+			Name:      pod.Name,
+			UID:       pod.UID,
+		},
+		NodeName: d.nodeName,
+	})
+	return err
 }
 
 func validateIPRanges(poolName string, subnet *net.IPNet, kind string, ranges []config.IPRange) error {

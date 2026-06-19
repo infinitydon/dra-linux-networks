@@ -10,6 +10,8 @@ The driver uses:
 - The kubelet DRA plugin API for claim preparation.
 - containerd NRI for pod sandbox network namespace attachment.
 - Linux netlink for `macvlan` and `ipvlan` creation.
+- Cluster-scoped `IPAllocation` objects for multi-node IP uniqueness.
+- A controller Deployment for stale-allocation cleanup and pool status.
 
 ## Status
 
@@ -78,6 +80,23 @@ spec:
         - 192.168.88.10
   gateway: 192.168.88.1
 ```
+
+Cluster-wide allocations can be inspected with:
+
+```bash
+kubectl get lnipa
+```
+
+Each pool/address pair maps to one deterministic `IPAllocation` object. Node
+plugins create that object atomically through the Kubernetes API server. If two
+workers request the same address concurrently, only one create succeeds and the
+other worker tries the next dynamic address or rejects the conflicting static
+request.
+
+The controller runs independently of the node plugins. It deletes allocations
+whose referenced `ResourceClaim` no longer exists or whose claim UID has changed,
+and reports `allocated`, `dynamicAllocated`, and `staticAllocated` counts in
+`IPPool.status`. The local node state file is not used for cluster-wide locking.
 
 ## Example
 
@@ -151,6 +170,8 @@ claim `gateway` or `routes` entry when the secondary interface should own routes
   accidentally advertising management NICs or control-plane interfaces.
 - A claim is expected to be reserved by one pod. Shared parent links are fine,
   but each generated pod interface is claim-specific.
+- Multiple workers may use the same `IPPool`; allocation uniqueness is enforced
+  by cluster-scoped `IPAllocation` resources.
 - Do not mix `macvlan` and `ipvlan` children on the same Linux parent interface
   at the same time. Linux rejects that with `device or resource busy`. Use one
   parent for macvlan workloads and a different parent for ipvlan workloads if

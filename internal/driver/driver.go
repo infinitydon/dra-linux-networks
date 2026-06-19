@@ -19,7 +19,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
@@ -30,13 +29,8 @@ import (
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 
 	"github.com/infinitydon/dra-linux-networks/internal/config"
+	"github.com/infinitydon/dra-linux-networks/internal/ipamapi"
 )
-
-var ipPoolGVR = schema.GroupVersionResource{
-	Group:    "linux-net.dra.infinitydon.com",
-	Version:  "v1alpha1",
-	Resource: "ippools",
-}
 
 type Options struct {
 	NodeName               string
@@ -83,6 +77,9 @@ func Start(ctx context.Context, opts Options) (*Driver, error) {
 	}
 	if opts.Config == nil {
 		return nil, fmt.Errorf("config is required")
+	}
+	if opts.DynamicClient == nil {
+		return nil, fmt.Errorf("dynamic Kubernetes client is required")
 	}
 
 	store, err := NewStore(opts.StateFile)
@@ -197,7 +194,7 @@ func (d *Driver) reloadIPPools(ctx context.Context) {
 		pools[pool.Name] = pool
 	}
 	if d.dynamic != nil {
-		list, err := d.dynamic.Resource(ipPoolGVR).List(ctx, metav1.ListOptions{})
+		list, err := d.dynamic.Resource(ipamapi.IPPoolGVR).List(ctx, metav1.ListOptions{})
 		if apierrors.IsNotFound(err) {
 			klog.InfoS("IPPool CRD is not installed, using configured IP pools")
 		} else if err != nil {
@@ -351,7 +348,7 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 		if err := validateConfig(ifc, netCfg); err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
 		}
-		if err := d.applyIPAM(ctx, &netCfg, claim.UID, types.UID(reserved.UID)); err != nil {
+		if err := d.applyIPAM(ctx, &netCfg, claim, pod); err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
 		}
 
@@ -374,9 +371,13 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 	return kubeletplugin.PrepareResult{Devices: prepared}
 }
 
-func (d *Driver) UnprepareResourceClaims(_ context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
+func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
 	result := map[types.UID]error{}
 	for _, claim := range claims {
+		if err := ipamapi.DeleteForClaim(ctx, d.dynamic, claim.UID); err != nil {
+			result[claim.UID] = fmt.Errorf("delete cluster IP allocation: %w", err)
+			continue
+		}
 		result[claim.UID] = d.store.DeleteClaim(claim.UID)
 	}
 	return result, nil
