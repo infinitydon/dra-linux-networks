@@ -1,0 +1,50 @@
+image:
+  repository: ghcr.io/infinitydon/dra-linux-networks
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+driverName: linux-net.dra.infinitydon.com
+
+nodeSelector:
+  linux-net.dra.infinitydon.com/enabled: "true"
+
+tolerations: []
+
+priorityClassName: system-node-critical
+
+kubelet:
+  pluginsDir: /var/lib/kubelet/plugins
+  registrationDir: /var/lib/kubelet/plugins_registry
+
+nri:
+  socketDir: /var/run/nri
+
+state:
+  hostPath: /var/run/linux-net-dra
+  file: /var/run/linux-net-dra/state.json
+
+interfaces:
+  - name: enp8s20
+    default: true
+    types:
+      - macvlan
+      - ipvlan
+    macvlanModes:
+      - bridge
+      - private
+      - vepa
+      - passthru
+    ipvlanModes:
+      - l2
+      - l3
+      - l3s
+    defaultType: macvlan
+    defaultMode: bridge
+    defaultPodInterfaceName: net1
+    mtu: 9000
+
+deviceClass:
+  create: true
+  name: linux-net-macvlan
+  type: macvlan
+  interfaceName: enp8s20

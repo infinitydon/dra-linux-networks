@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "linux-net-dra.fullname" . }}
+  labels:
+    {{- include "linux-net-dra.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "linux-net-dra.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "linux-net-dra.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "linux-net-dra.fullname" . }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      containers:
+        - name: linux-net-dra
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: true
+          args:
+            - --driver-name={{ .Values.driverName }}
+            - --config=/etc/linux-net-dra/config.json
+            - --state-file={{ .Values.state.file }}
+            - --kubelet-plugins-dir={{ .Values.kubelet.pluginsDir }}
+            - --kubelet-registration-dir={{ .Values.kubelet.registrationDir }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: healthz
+              containerPort: 9178
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: config
+              mountPath: /etc/linux-net-dra
+              readOnly: true
+            - name: state
+              mountPath: /var/run/linux-net-dra
+            - name: nri
+              mountPath: /var/run/nri
+            - name: kubelet-plugins
+              mountPath: {{ .Values.kubelet.pluginsDir }}
+            - name: kubelet-registration
+              mountPath: {{ .Values.kubelet.registrationDir }}
+            - name: netns
+              mountPath: /var/run/netns
+              mountPropagation: Bidirectional
+            - name: host-run
+              mountPath: /run
+              mountPropagation: Bidirectional
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "linux-net-dra.fullname" . }}-config
+        - name: state
+          hostPath:
+            path: {{ .Values.state.hostPath }}
+            type: DirectoryOrCreate
+        - name: nri
+          hostPath:
+            path: {{ .Values.nri.socketDir }}
+            type: Directory
+        - name: kubelet-plugins
+          hostPath:
+            path: {{ .Values.kubelet.pluginsDir }}
+            type: DirectoryOrCreate
+        - name: kubelet-registration
+          hostPath:
+            path: {{ .Values.kubelet.registrationDir }}
+            type: DirectoryOrCreate
+        - name: netns
+          hostPath:
+            path: /var/run/netns
+            type: DirectoryOrCreate
+        - name: host-run
+          hostPath:
+            path: /run
+            type: Directory
