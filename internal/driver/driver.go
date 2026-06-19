@@ -15,6 +15,7 @@ import (
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
+	corev1 "k8s.io/api/core/v1"
 	resourceapi "k8s.io/api/resource/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -368,15 +369,30 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			return kubeletplugin.PrepareResult{Err: err}
 		}
 
+		var shareID *string
+		if allocation.ShareID != nil {
+			value := string(*allocation.ShareID)
+			shareID = &value
+		}
 		deviceCfg := DeviceConfig{
 			Claim:      types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name},
 			ClaimUID:   claim.UID,
+			DriverName: allocation.Driver,
+			PoolName:   allocation.Pool,
 			DeviceName: allocation.Device,
+			ShareID:    shareID,
 			ParentName: ifc.Name,
 			Network:    netCfg,
 		}
 		if err := d.store.SetDevice(types.UID(reserved.UID), allocation.Device, deviceCfg); err != nil {
 			return kubeletplugin.PrepareResult{Err: fmt.Errorf("persist pod config: %w", err)}
+		}
+		preparedMessage := networkPreparedMessage(deviceCfg)
+		if err := d.setResourceClaimDeviceStatus(ctx, deviceCfg, false, "NetworkPrepared", preparedMessage, ""); err != nil {
+			return kubeletplugin.PrepareResult{Err: fmt.Errorf("report prepared device status: %w", err)}
+		}
+		if err := d.emitPodEvent(ctx, pod, corev1.EventTypeNormal, "LinuxNetworkPrepared", "PrepareNetwork", preparedMessage, &deviceCfg.Claim); err != nil {
+			klog.ErrorS(err, "Could not emit Pod event", "pod", klog.KObj(pod))
 		}
 		prepared = append(prepared, kubeletplugin.Device{
 			Requests:   []string{allocation.Request},
@@ -384,12 +400,21 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			DeviceName: allocation.Device,
 		})
 	}
+	if len(prepared) > 0 {
+		if err := d.setPodNetworkCondition(ctx, pod.Namespace, pod.Name, pod.UID, corev1.ConditionFalse, "NetworkPrepared", "Secondary network resources are prepared; waiting for attachment"); err != nil {
+			return kubeletplugin.PrepareResult{Err: fmt.Errorf("set Pod network readiness: %w", err)}
+		}
+	}
 	return kubeletplugin.PrepareResult{Devices: prepared}
 }
 
 func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
 	result := map[types.UID]error{}
 	for _, claim := range claims {
+		if err := d.removeResourceClaimDeviceStatus(ctx, types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name}); err != nil {
+			result[claim.UID] = fmt.Errorf("remove ResourceClaim device status: %w", err)
+			continue
+		}
 		if err := ipamapi.DeleteForClaim(ctx, d.dynamic, claim.UID); err != nil {
 			result[claim.UID] = fmt.Errorf("delete cluster IP allocation: %w", err)
 			continue
@@ -408,7 +433,7 @@ func (d *Driver) Synchronize(_ context.Context, pods []*api.PodSandbox, _ []*api
 	return nil, nil
 }
 
-func (d *Driver) RunPodSandbox(_ context.Context, pod *api.PodSandbox) error {
+func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	podUID := types.UID(pod.GetUid())
 	podCfg, ok := d.store.GetPod(podUID)
 	if !ok {
@@ -421,17 +446,40 @@ func (d *Driver) RunPodSandbox(_ context.Context, pod *api.PodSandbox) error {
 	if err := d.store.SetNetNS(podUID, nsPath); err != nil {
 		return err
 	}
+	kubePod, err := d.client.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
+	if err != nil {
+		return fmt.Errorf("get Pod for network status: %w", err)
+	}
+	if kubePod.UID != podUID {
+		return fmt.Errorf("Pod %s/%s UID changed", pod.Namespace, pod.Name)
+	}
 	for deviceName, cfg := range podCfg.Devices {
-		if cfg.AttachedIf != "" {
-			continue
+		if cfg.AttachedIf == "" {
+			hardwareAddress, err := attachLink(nsPath, cfg)
+			if err != nil {
+				message := fmt.Sprintf("failed to attach %s: %v", cfg.Network.InterfaceName, err)
+				_ = d.setResourceClaimDeviceStatus(ctx, cfg, false, "NetworkAttachFailed", message, "")
+				_ = d.setPodNetworkCondition(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, corev1.ConditionFalse, "NetworkAttachFailed", message)
+				_ = d.emitPodEvent(ctx, kubePod, corev1.EventTypeWarning, "LinuxNetworkAttachFailed", "AttachNetwork", message, &cfg.Claim)
+				return fmt.Errorf("attach %s for pod %s/%s: %w", deviceName, pod.Namespace, pod.Name, err)
+			}
+			cfg.AttachedIf = cfg.Network.InterfaceName
+			cfg.HardwareAddress = hardwareAddress
+			if err := d.store.SetDevice(podUID, deviceName, cfg); err != nil {
+				return err
+			}
 		}
-		if err := attachLink(nsPath, cfg); err != nil {
-			return fmt.Errorf("attach %s for pod %s/%s: %w", deviceName, pod.Namespace, pod.Name, err)
+		message := networkStatusMessage(cfg)
+		if err := d.setResourceClaimDeviceStatus(ctx, cfg, true, "NetworkAttached", message, cfg.HardwareAddress); err != nil {
+			_ = d.emitPodEvent(ctx, kubePod, corev1.EventTypeWarning, "LinuxNetworkStatusUpdateFailed", "ReportNetworkStatus", err.Error(), &cfg.Claim)
+			return fmt.Errorf("report attached device status: %w", err)
 		}
-		cfg.AttachedIf = cfg.Network.InterfaceName
-		if err := d.store.SetDevice(podUID, deviceName, cfg); err != nil {
-			return err
+		if err := d.emitPodEvent(ctx, kubePod, corev1.EventTypeNormal, "LinuxNetworkAttached", "AttachNetwork", message, &cfg.Claim); err != nil {
+			klog.ErrorS(err, "Could not emit Pod event", "pod", klog.KObj(kubePod))
 		}
+	}
+	if err := d.setPodNetworkCondition(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, corev1.ConditionTrue, "NetworkAttached", "All requested secondary networks are attached"); err != nil {
+		return fmt.Errorf("set Pod network readiness: %w", err)
 	}
 	return nil
 }
@@ -461,10 +509,10 @@ func (d *Driver) configForRequest(claim *resourceapi.ResourceClaim, request stri
 	return cfg, nil
 }
 
-func attachLink(nsPath string, cfg DeviceConfig) error {
+func attachLink(nsPath string, cfg DeviceConfig) (string, error) {
 	parent, err := netlink.LinkByName(cfg.ParentName)
 	if err != nil {
-		return err
+		return "", err
 	}
 	name := hostChildName(cfg)
 	attrs := netlink.NewLinkAttrs()
@@ -481,29 +529,30 @@ func attachLink(nsPath string, cfg DeviceConfig) error {
 	case "ipvlan":
 		child = &netlink.IPVlan{LinkAttrs: attrs, Mode: ipvlanMode(cfg.Network.Mode)}
 	default:
-		return fmt.Errorf("unsupported link type %q", cfg.Network.Type)
+		return "", fmt.Errorf("unsupported link type %q", cfg.Network.Type)
 	}
 
 	if old, err := netlink.LinkByName(name); err == nil {
 		_ = netlink.LinkDel(old)
 	}
 	if err := netlink.LinkAdd(child); err != nil {
-		return err
+		return "", err
 	}
 
 	target, err := netns.GetFromPath(nsPath)
 	if err != nil {
 		_ = netlink.LinkDel(child)
-		return err
+		return "", err
 	}
 	defer target.Close()
 
 	if err := netlink.LinkSetNsFd(child, int(target)); err != nil {
 		_ = netlink.LinkDel(child)
-		return err
+		return "", err
 	}
 
-	return inNetNS(target, func() error {
+	hardwareAddress := ""
+	err = inNetNS(target, func() error {
 		link, err := netlink.LinkByName(name)
 		if err != nil {
 			return err
@@ -529,6 +578,7 @@ func attachLink(nsPath string, cfg DeviceConfig) error {
 		if err := netlink.LinkSetUp(link); err != nil {
 			return err
 		}
+		hardwareAddress = link.Attrs().HardwareAddr.String()
 		if cfg.Network.Gateway != "" {
 			if err := addRoute(link, "0.0.0.0/0", cfg.Network.Gateway); err != nil {
 				return err
@@ -541,6 +591,7 @@ func attachLink(nsPath string, cfg DeviceConfig) error {
 		}
 		return nil
 	})
+	return hardwareAddress, err
 }
 
 func addRoute(link netlink.Link, dst, gw string) error {

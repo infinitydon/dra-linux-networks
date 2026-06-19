@@ -29,6 +29,8 @@ metadata:
     linux-net.dra.infinitydon.com/net1.address: 192.168.88.10/24
 spec:
   restartPolicy: Never
+  readinessGates:
+    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: net1
       resourceClaimTemplateName: linux-net-static-pool

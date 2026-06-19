@@ -26,6 +26,8 @@ metadata:
   name: linux-net-dynamic-pool-test
 spec:
   restartPolicy: Never
+  readinessGates:
+    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: net1
       resourceClaimTemplateName: linux-net-dynamic-pool

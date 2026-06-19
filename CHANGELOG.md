@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.10
+
+- Report DRA-native network state in `ResourceClaim.status.devices`.
+- Include interface name, CIDRs, MAC address, IPPool, link type, mode, and parent.
+- Emit Pod Events for network preparation, attachment, and attachment failures.
+- Add opt-in `linux-net.dra.infinitydon.com/NetworkReady` readiness-gate support.
+- Extend multi-node e2e coverage to assert status, Events, and readiness.
+
 ## v0.1.9
 
 - Move the example `lan-88` IPPool out of the Helm release.

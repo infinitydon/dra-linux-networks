@@ -33,12 +33,16 @@ type Route struct {
 }
 
 type DeviceConfig struct {
-	Claim      types.NamespacedName `json:"claim"`
-	ClaimUID   types.UID            `json:"claimUID"`
-	DeviceName string               `json:"deviceName"`
-	ParentName string               `json:"parentName"`
-	Network    NetworkConfig        `json:"network"`
-	AttachedIf string               `json:"attachedInterface,omitempty"`
+	Claim           types.NamespacedName `json:"claim"`
+	ClaimUID        types.UID            `json:"claimUID"`
+	DriverName      string               `json:"driverName"`
+	PoolName        string               `json:"poolName"`
+	DeviceName      string               `json:"deviceName"`
+	ShareID         *string              `json:"shareID,omitempty"`
+	ParentName      string               `json:"parentName"`
+	Network         NetworkConfig        `json:"network"`
+	AttachedIf      string               `json:"attachedInterface,omitempty"`
+	HardwareAddress string               `json:"hardwareAddress,omitempty"`
 }
 
 type PodConfig struct {

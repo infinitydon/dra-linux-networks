@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.1.9"
+  tag: "0.1.10"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com

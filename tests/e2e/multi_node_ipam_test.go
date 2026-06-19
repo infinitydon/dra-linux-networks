@@ -89,6 +89,36 @@ func TestMultiNodeIPAMConnectivity(t *testing.T) {
 		assertOutputContains(t, output, dynamicIP, *dynamicNode, dynamicPodName)
 	})
 
+	t.Run("PodsReportSecondaryNetworkReady", func(t *testing.T) {
+		for _, pod := range []string{staticPodName, dynamicPodName} {
+			status := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod,
+				"-o", `jsonpath={.status.conditions[?(@.type=="linux-net.dra.infinitydon.com/NetworkReady")].status}`))
+			if status != "True" {
+				t.Fatalf("pod %s NetworkReady = %q, want True", pod, status)
+			}
+		}
+	})
+
+	t.Run("ResourceClaimsReportReadyNetworkData", func(t *testing.T) {
+		for _, pod := range []string{staticPodName, dynamicPodName} {
+			claim := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod,
+				"-o", "jsonpath={.status.resourceClaimStatuses[0].resourceClaimName}"))
+			if claim == "" {
+				t.Fatalf("pod %s has no generated ResourceClaim name", pod)
+			}
+			status := mustKubectl(t, "-n", *namespace, "get", "resourceclaim", claim,
+				"-o", `jsonpath={.status.devices[0].conditions[?(@.type=="Ready")].status} {.status.devices[0].networkData.interfaceName} {.status.devices[0].networkData.ips[0]} {.status.devices[0].data.ipPool}`)
+			assertOutputContains(t, status, "True", "net1", *poolName)
+		}
+	})
+
+	t.Run("PodDescribeReportsNetworkLifecycleEvents", func(t *testing.T) {
+		for _, pod := range []string{staticPodName, dynamicPodName} {
+			description := mustKubectl(t, "-n", *namespace, "describe", "pod", pod)
+			assertOutputContains(t, description, "LinuxNetworkPrepared", "LinuxNetworkAttached", "IPPool "+*poolName)
+		}
+	})
+
 	t.Run("GatewayReachableFromStaticAndDynamicAllocations", func(t *testing.T) {
 		ping(t, staticPodName, *gateway)
 		ping(t, dynamicPodName, *gateway)
@@ -229,6 +259,8 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %[6]s
   restartPolicy: Never
+  readinessGates:
+    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: net1
       resourceClaimTemplateName: %[1]s
@@ -249,6 +281,8 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %[8]s
   restartPolicy: Never
+  readinessGates:
+    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: net1
       resourceClaimTemplateName: %[1]s

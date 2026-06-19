@@ -194,6 +194,30 @@ name. The `ip-pool` annotation is required with `address` and must match the
 `ipPool` in the ResourceClaim configuration. The requested IP must be covered
 by that `IPPool` reservation. Missing or mismatched pool references are rejected.
 
+## Network status
+
+The driver reports durable network state in the generated ResourceClaim under
+`status.devices`. A successfully attached device includes a `Ready=True`
+condition, `networkData.interfaceName`, assigned CIDR addresses, hardware
+address, and driver data containing the IPPool, link type, mode, and parent.
+
+The driver also emits `LinuxNetworkPrepared`, `LinuxNetworkAttached`, and
+`LinuxNetworkAttachFailed` Events against the Pod, so the lifecycle appears in
+`kubectl describe pod`.
+
+Pods may make the secondary network part of readiness by adding:
+
+```yaml
+spec:
+  readinessGates:
+    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
+```
+
+For opted-in Pods, the driver owns that condition and sets it to `True` only
+after NRI has attached all requested secondary interfaces. ResourceClaim status
+is the durable source of truth; Events are supplemental and expire according to
+the cluster Event retention policy.
+
 Pool `gateway` is not automatically installed as a second default route because
 pods normally already have a default route from the primary CNI. Add an explicit
 claim `gateway` or `routes` entry when the secondary interface should own routes.
