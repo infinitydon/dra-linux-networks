@@ -10,6 +10,5 @@ spec:
     - cel:
         expression: >-
           device.driver == {{ .Values.driverName | squote }} &&
-          device.attributes[{{ .Values.driverName | squote }}].interface.string == {{ .Values.deviceClass.interfaceName | squote }} &&
-          device.attributes[{{ .Values.driverName | squote }}].{{ .Values.deviceClass.type }}.bool == true
+          device.attributes[{{ .Values.driverName | squote }}].{{ .Values.deviceClass.type }} == true
 {{- end }}

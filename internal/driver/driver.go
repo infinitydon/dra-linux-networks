@@ -159,9 +159,11 @@ func (d *Driver) publish(ctx context.Context) error {
 			klog.ErrorS(err, "configured interface is not present, skipping", "interface", ifc.Name)
 			continue
 		}
+		allowMultiple := true
 		devices = append(devices, resourceapi.Device{
-			Name:       deviceName(ifc.Name),
-			Attributes: deviceAttributes(ifc, link),
+			Name:                     deviceName(ifc.Name),
+			Attributes:               deviceAttributes(ifc, link),
+			AllowMultipleAllocations: &allowMultiple,
 		})
 	}
 	resources := resourceslice.DriverResources{
