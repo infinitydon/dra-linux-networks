@@ -1,0 +1,24 @@
+{{- range .Values.ipPools }}
+---
+apiVersion: linux-net.dra.infinitydon.com/v1alpha1
+kind: IPPool
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "linux-net-dra.labels" $ | nindent 4 }}
+spec:
+  subnet: {{ .subnet | quote }}
+  {{- with .gateway }}
+  gateway: {{ . | quote }}
+  {{- end }}
+  allocations:
+    {{- toYaml .allocations | nindent 4 }}
+  {{- with .reservations }}
+  reservations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .routes }}
+  routes:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

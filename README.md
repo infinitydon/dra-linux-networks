@@ -59,6 +59,26 @@ interfaces:
     mtu: 9000
 ```
 
+The chart also installs the `IPPool` CRD and creates a default pool:
+
+```yaml
+apiVersion: linux-net.dra.infinitydon.com/v1alpha1
+kind: IPPool
+metadata:
+  name: lan-88
+spec:
+  subnet: 192.168.88.0/24
+  allocations:
+    - name: dynamic
+      rangeStart: 192.168.88.11
+      rangeEnd: 192.168.88.15
+  reservations:
+    - name: static
+      addresses:
+        - 192.168.88.10
+  gateway: 192.168.88.1
+```
+
 ## Example
 
 Create a macvlan claim and pod:
@@ -96,15 +116,28 @@ Supported fields:
 - `mode`: macvlan `bridge`, `private`, `vepa`, `passthru`; ipvlan `l2`, `l3`, `l3s`
 - `interfaceName`: interface name inside the pod, default `net1`
 - `mtu`: pod interface MTU
-- `ipPool`: named pool from Helm values
+- `ipPool`: named `IPPool`
 - `address`: optional static address from that pool, for example `192.168.88.10/24`
 - `addresses`: direct static addresses in CIDR notation, mostly for testing or advanced use
 - `gateway`: default IPv4 gateway
 - `routes`: additional routes with `destination` and `gateway`
 
 When `ipPool` is set and `address` is omitted, the driver reserves the next
-free address from the pool. When both are set, the driver validates and reserves
-the requested static address.
+free address from `spec.allocations`, skipping any address in `spec.reservations`.
+When a static `address` is set, the driver only accepts it if it is inside
+`spec.reservations`.
+
+To keep a single reusable `ResourceClaimTemplate`, put static IP requests on
+the Pod instead of the template:
+
+```yaml
+metadata:
+  annotations:
+    linux-net.dra.infinitydon.com/net1.address: 192.168.88.10/24
+```
+
+The annotation key may use either the DRA request name or the pod interface
+name. The requested IP must be covered by the referenced `IPPool` reservation.
 
 Pool `gateway` is not automatically installed as a second default route because
 pods normally already have a default route from the primary CNI. Add an explicit

@@ -16,8 +16,13 @@ import (
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 	resourceapi "k8s.io/api/resource/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
@@ -27,6 +32,12 @@ import (
 	"github.com/infinitydon/dra-linux-networks/internal/config"
 )
 
+var ipPoolGVR = schema.GroupVersionResource{
+	Group:    "linux-net.dra.infinitydon.com",
+	Version:  "v1alpha1",
+	Resource: "ippools",
+}
+
 type Options struct {
 	NodeName               string
 	DriverName             string
@@ -35,6 +46,7 @@ type Options struct {
 	StateFile              string
 	Config                 *config.Config
 	Client                 kubernetes.Interface
+	DynamicClient          dynamic.Interface
 }
 
 type helper interface {
@@ -48,6 +60,7 @@ type Driver struct {
 	driverName string
 	cfg        *config.Config
 	client     kubernetes.Interface
+	dynamic    dynamic.Interface
 	helper     helper
 	nri        stub.Stub
 	store      *Store
@@ -82,6 +95,7 @@ func Start(ctx context.Context, opts Options) (*Driver, error) {
 		driverName: opts.DriverName,
 		cfg:        opts.Config,
 		client:     opts.Client,
+		dynamic:    opts.DynamicClient,
 		store:      store,
 		devices:    map[string]config.InterfaceConfig{},
 		ipPools:    map[string]config.IPPool{},
@@ -90,9 +104,7 @@ func Start(ctx context.Context, opts Options) (*Driver, error) {
 	for _, ifc := range opts.Config.Interfaces {
 		d.devices[deviceName(ifc.Name)] = ifc
 	}
-	for _, pool := range opts.Config.IPPools {
-		d.ipPools[pool.Name] = pool
-	}
+	d.reloadIPPools(ctx)
 
 	pluginPath := filepath.Join(opts.KubeletPluginsDir, opts.DriverName)
 	if err := os.MkdirAll(pluginPath, 0750); err != nil {
@@ -179,6 +191,99 @@ func (d *Driver) publish(ctx context.Context) error {
 	return d.helper.PublishResources(ctx, resources)
 }
 
+func (d *Driver) reloadIPPools(ctx context.Context) {
+	pools := map[string]config.IPPool{}
+	for _, pool := range d.cfg.IPPools {
+		pools[pool.Name] = pool
+	}
+	if d.dynamic != nil {
+		list, err := d.dynamic.Resource(ipPoolGVR).List(ctx, metav1.ListOptions{})
+		if apierrors.IsNotFound(err) {
+			klog.InfoS("IPPool CRD is not installed, using configured IP pools")
+		} else if err != nil {
+			klog.ErrorS(err, "Could not list IPPool resources, using configured IP pools")
+		} else {
+			for i := range list.Items {
+				pool, err := ipPoolFromUnstructured(&list.Items[i])
+				if err != nil {
+					klog.ErrorS(err, "Ignoring invalid IPPool", "name", list.Items[i].GetName())
+					continue
+				}
+				pools[pool.Name] = pool
+			}
+		}
+	}
+	d.ipPools = pools
+}
+
+func ipPoolFromUnstructured(obj *unstructured.Unstructured) (config.IPPool, error) {
+	spec, ok := obj.Object["spec"].(map[string]interface{})
+	if !ok {
+		return config.IPPool{}, fmt.Errorf("spec is required")
+	}
+	pool := config.IPPool{Name: obj.GetName()}
+	if value, ok, _ := unstructured.NestedString(spec, "subnet"); ok {
+		pool.Subnet = value
+	}
+	if value, ok, _ := unstructured.NestedString(spec, "gateway"); ok {
+		pool.Gateway = value
+	}
+	pool.Allocations = ipRangesFromSpec(spec, "allocations")
+	pool.Reservations = ipRangesFromSpec(spec, "reservations")
+	if rawRoutes, ok, _ := unstructured.NestedSlice(spec, "routes"); ok {
+		for _, rawRoute := range rawRoutes {
+			routeMap, ok := rawRoute.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			route := config.Route{}
+			if value, ok, _ := unstructured.NestedString(routeMap, "destination"); ok {
+				route.Destination = value
+			}
+			if value, ok, _ := unstructured.NestedString(routeMap, "gateway"); ok {
+				route.Gateway = value
+			}
+			pool.Routes = append(pool.Routes, route)
+		}
+	}
+	if pool.Subnet == "" {
+		return config.IPPool{}, fmt.Errorf("spec.subnet is required")
+	}
+	if len(pool.Allocations) == 0 {
+		return config.IPPool{}, fmt.Errorf("spec.allocations is required")
+	}
+	return pool, nil
+}
+
+func ipRangesFromSpec(spec map[string]interface{}, field string) []config.IPRange {
+	rawRanges, ok, _ := unstructured.NestedSlice(spec, field)
+	if !ok {
+		return nil
+	}
+	ranges := []config.IPRange{}
+	for _, rawRange := range rawRanges {
+		rangeMap, ok := rawRange.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		ipRange := config.IPRange{}
+		if value, ok, _ := unstructured.NestedString(rangeMap, "name"); ok {
+			ipRange.Name = value
+		}
+		if value, ok, _ := unstructured.NestedString(rangeMap, "rangeStart"); ok {
+			ipRange.RangeStart = value
+		}
+		if value, ok, _ := unstructured.NestedString(rangeMap, "rangeEnd"); ok {
+			ipRange.RangeEnd = value
+		}
+		if values, ok, _ := unstructured.NestedStringSlice(rangeMap, "addresses"); ok {
+			ipRange.Addresses = values
+		}
+		ranges = append(ranges, ipRange)
+	}
+	return ranges
+}
+
 func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceapi.ResourceClaim) (map[types.UID]kubeletplugin.PrepareResult, error) {
 	result := map[types.UID]kubeletplugin.PrepareResult{}
 	for _, claim := range claims {
@@ -187,7 +292,23 @@ func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 	return result, nil
 }
 
-func (d *Driver) prepareClaim(_ context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+func podAddressAnnotation(annotations map[string]string, request, interfaceName string) string {
+	if len(annotations) == 0 {
+		return ""
+	}
+	keys := []string{
+		AttrPrefix + "/" + request + ".address",
+		AttrPrefix + "/" + interfaceName + ".address",
+	}
+	for _, key := range keys {
+		if value := strings.TrimSpace(annotations[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
 	if len(claim.Status.ReservedFor) == 0 {
 		return kubeletplugin.PrepareResult{}
 	}
@@ -197,6 +318,10 @@ func (d *Driver) prepareClaim(_ context.Context, claim *resourceapi.ResourceClai
 	reserved := claim.Status.ReservedFor[0]
 	if reserved.APIGroup != "" || reserved.Resource != "pods" {
 		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s/%s is reserved for unsupported object %s/%s", claim.Namespace, claim.Name, reserved.APIGroup, reserved.Resource)}
+	}
+	pod, err := d.client.CoreV1().Pods(claim.Namespace).Get(ctx, reserved.Name, metav1.GetOptions{})
+	if err != nil {
+		return kubeletplugin.PrepareResult{Err: fmt.Errorf("get pod %s/%s for claim %s/%s: %w", claim.Namespace, reserved.Name, claim.Namespace, claim.Name, err)}
 	}
 
 	prepared := []kubeletplugin.Device{}
@@ -220,10 +345,13 @@ func (d *Driver) prepareClaim(_ context.Context, claim *resourceapi.ResourceClai
 		} else {
 			mergeConfig(&netCfg, userCfg)
 		}
+		if address := podAddressAnnotation(pod.Annotations, allocation.Request, netCfg.InterfaceName); address != "" {
+			netCfg.Address = address
+		}
 		if err := validateConfig(ifc, netCfg); err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
 		}
-		if err := d.applyIPAM(&netCfg, claim.UID, types.UID(reserved.UID)); err != nil {
+		if err := d.applyIPAM(ctx, &netCfg, claim.UID, types.UID(reserved.UID)); err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
 		}
 

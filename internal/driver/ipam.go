@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -10,10 +11,11 @@ import (
 	"github.com/infinitydon/dra-linux-networks/internal/config"
 )
 
-func (d *Driver) applyIPAM(netCfg *NetworkConfig, claimUID, podUID types.UID) error {
+func (d *Driver) applyIPAM(ctx context.Context, netCfg *NetworkConfig, claimUID, podUID types.UID) error {
 	if netCfg.IPPool == "" {
 		return nil
 	}
+	d.reloadIPPools(ctx)
 	pool, ok := d.ipPools[netCfg.IPPool]
 	if !ok {
 		return fmt.Errorf("unknown IP pool %q", netCfg.IPPool)
@@ -23,18 +25,11 @@ func (d *Driver) applyIPAM(netCfg *NetworkConfig, claimUID, podUID types.UID) er
 		return fmt.Errorf("parse pool %s subnet %q: %w", pool.Name, pool.Subnet, err)
 	}
 	subnet.IP = subnetIP
-	start := net.ParseIP(pool.RangeStart).To4()
-	end := net.ParseIP(pool.RangeEnd).To4()
-	if start == nil || end == nil {
-		return fmt.Errorf("pool %s range must be IPv4", pool.Name)
+	if err := validateIPRanges(pool.Name, subnet, "allocation", pool.Allocations); err != nil {
+		return err
 	}
-	if !subnet.Contains(start) || !subnet.Contains(end) {
-		return fmt.Errorf("pool %s range %s-%s is outside subnet %s", pool.Name, pool.RangeStart, pool.RangeEnd, pool.Subnet)
-	}
-	startInt := ipToUint32(start)
-	endInt := ipToUint32(end)
-	if startInt > endInt {
-		return fmt.Errorf("pool %s rangeStart must be <= rangeEnd", pool.Name)
+	if err := validateIPRanges(pool.Name, subnet, "reservation", pool.Reservations); err != nil {
+		return err
 	}
 
 	address := netCfg.Address
@@ -42,7 +37,7 @@ func (d *Driver) applyIPAM(netCfg *NetworkConfig, claimUID, podUID types.UID) er
 		address = allocation.Address
 	}
 	if address == "" {
-		address, err = d.nextFreeAddress(pool, subnet, startInt, endInt)
+		address, err = d.nextFreeAddress(pool, subnet)
 		if err != nil {
 			return err
 		}
@@ -52,9 +47,8 @@ func (d *Driver) applyIPAM(netCfg *NetworkConfig, claimUID, podUID types.UID) er
 			return err
 		}
 		ip, _, _ := net.ParseCIDR(address)
-		ipInt := ipToUint32(ip.To4())
-		if ipInt < startInt || ipInt > endInt {
-			return fmt.Errorf("requested address %s is outside pool %s range %s-%s", address, pool.Name, pool.RangeStart, pool.RangeEnd)
+		if !ipInRanges(ip.To4(), pool.Reservations) {
+			return fmt.Errorf("requested static address %s is not reserved in pool %s", address, pool.Name)
 		}
 	}
 
@@ -74,19 +68,99 @@ func (d *Driver) applyIPAM(netCfg *NetworkConfig, claimUID, podUID types.UID) er
 	return nil
 }
 
-func (d *Driver) nextFreeAddress(pool config.IPPool, subnet *net.IPNet, start, end uint32) (string, error) {
+func (d *Driver) nextFreeAddress(pool config.IPPool, subnet *net.IPNet) (string, error) {
 	ones, _ := subnet.Mask.Size()
-	for current := start; current <= end; current++ {
-		ip := uint32ToIP(current)
-		address := fmt.Sprintf("%s/%d", ip.String(), ones)
-		if !d.store.IsIPAllocated(pool.Name, address) {
-			return address, nil
+	for _, allocationRange := range pool.Allocations {
+		for _, ip := range expandIPRange(allocationRange) {
+			if ipInRanges(ip, pool.Reservations) {
+				continue
+			}
+			address := fmt.Sprintf("%s/%d", ip.String(), ones)
+			if !d.store.IsIPAllocated(pool.Name, address) {
+				return address, nil
+			}
+			if ipToUint32(ip) == ^uint32(0) {
+				break
+			}
 		}
+	}
+	return "", fmt.Errorf("pool %s has no free addresses", pool.Name)
+}
+
+func validateIPRanges(poolName string, subnet *net.IPNet, kind string, ranges []config.IPRange) error {
+	for i, ipRange := range ranges {
+		for _, address := range ipRange.Addresses {
+			ip := net.ParseIP(address).To4()
+			if ip == nil {
+				return fmt.Errorf("pool %s %s[%d] address %s must be IPv4", poolName, kind, i, address)
+			}
+			if !subnet.Contains(ip) {
+				return fmt.Errorf("pool %s %s[%d] address %s is outside subnet %s", poolName, kind, i, address, subnet.String())
+			}
+		}
+		if ipRange.RangeStart == "" && ipRange.RangeEnd == "" {
+			continue
+		}
+		start := net.ParseIP(ipRange.RangeStart).To4()
+		end := net.ParseIP(ipRange.RangeEnd).To4()
+		if start == nil || end == nil {
+			return fmt.Errorf("pool %s %s[%d] range must be IPv4", poolName, kind, i)
+		}
+		if !subnet.Contains(start) || !subnet.Contains(end) {
+			return fmt.Errorf("pool %s %s[%d] range %s-%s is outside subnet %s", poolName, kind, i, ipRange.RangeStart, ipRange.RangeEnd, subnet.String())
+		}
+		if ipToUint32(start) > ipToUint32(end) {
+			return fmt.Errorf("pool %s %s[%d] rangeStart must be <= rangeEnd", poolName, kind, i)
+		}
+	}
+	return nil
+}
+
+func ipInRanges(ip net.IP, ranges []config.IPRange) bool {
+	value := ipToUint32(ip)
+	for _, ipRange := range ranges {
+		for _, address := range ipRange.Addresses {
+			if parsed := net.ParseIP(address).To4(); parsed != nil && ipToUint32(parsed) == value {
+				return true
+			}
+		}
+		if ipRange.RangeStart == "" || ipRange.RangeEnd == "" {
+			continue
+		}
+		start := net.ParseIP(ipRange.RangeStart).To4()
+		end := net.ParseIP(ipRange.RangeEnd).To4()
+		if start == nil || end == nil {
+			continue
+		}
+		if value >= ipToUint32(start) && value <= ipToUint32(end) {
+			return true
+		}
+	}
+	return false
+}
+
+func expandIPRange(ipRange config.IPRange) []net.IP {
+	ips := []net.IP{}
+	for _, address := range ipRange.Addresses {
+		if ip := net.ParseIP(address).To4(); ip != nil {
+			ips = append(ips, ip)
+		}
+	}
+	if ipRange.RangeStart == "" || ipRange.RangeEnd == "" {
+		return ips
+	}
+	start := net.ParseIP(ipRange.RangeStart).To4()
+	end := net.ParseIP(ipRange.RangeEnd).To4()
+	if start == nil || end == nil {
+		return ips
+	}
+	for current, last := ipToUint32(start), ipToUint32(end); current <= last; current++ {
+		ips = append(ips, uint32ToIP(current))
 		if current == ^uint32(0) {
 			break
 		}
 	}
-	return "", fmt.Errorf("pool %s has no free addresses", pool.Name)
+	return ips
 }
 
 func normalizeRequestedAddress(pool config.IPPool, subnet *net.IPNet, address string) (string, error) {

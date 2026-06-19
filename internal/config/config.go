@@ -27,12 +27,21 @@ type InterfaceConfig struct {
 }
 
 type IPPool struct {
-	Name       string  `json:"name"`
-	Subnet     string  `json:"subnet"`
-	RangeStart string  `json:"rangeStart"`
-	RangeEnd   string  `json:"rangeEnd"`
-	Gateway    string  `json:"gateway"`
-	Routes     []Route `json:"routes"`
+	Name         string    `json:"name"`
+	Subnet       string    `json:"subnet"`
+	RangeStart   string    `json:"rangeStart"`
+	RangeEnd     string    `json:"rangeEnd"`
+	Allocations  []IPRange `json:"allocations"`
+	Reservations []IPRange `json:"reservations"`
+	Gateway      string    `json:"gateway"`
+	Routes       []Route   `json:"routes"`
+}
+
+type IPRange struct {
+	Name       string   `json:"name,omitempty"`
+	Addresses  []string `json:"addresses,omitempty"`
+	RangeStart string   `json:"rangeStart,omitempty"`
+	RangeEnd   string   `json:"rangeEnd,omitempty"`
 }
 
 type Route struct {
@@ -86,11 +95,14 @@ func Load(path string) (*Config, error) {
 		if cfg.IPPools[i].Subnet == "" {
 			return nil, fmt.Errorf("ipPools[%d].subnet is required", i)
 		}
-		if cfg.IPPools[i].RangeStart == "" {
-			return nil, fmt.Errorf("ipPools[%d].rangeStart is required", i)
+		if len(cfg.IPPools[i].Allocations) == 0 && cfg.IPPools[i].RangeStart != "" && cfg.IPPools[i].RangeEnd != "" {
+			cfg.IPPools[i].Allocations = []IPRange{{
+				RangeStart: cfg.IPPools[i].RangeStart,
+				RangeEnd:   cfg.IPPools[i].RangeEnd,
+			}}
 		}
-		if cfg.IPPools[i].RangeEnd == "" {
-			return nil, fmt.Errorf("ipPools[%d].rangeEnd is required", i)
+		if len(cfg.IPPools[i].Allocations) == 0 {
+			return nil, fmt.Errorf("ipPools[%d].allocations is required", i)
 		}
 	}
 	return cfg, nil

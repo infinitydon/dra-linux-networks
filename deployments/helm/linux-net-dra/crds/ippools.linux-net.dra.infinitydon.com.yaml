@@ -1,0 +1,107 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ippools.linux-net.dra.infinitydon.com
+spec:
+  group: linux-net.dra.infinitydon.com
+  scope: Cluster
+  names:
+    plural: ippools
+    singular: ippool
+    kind: IPPool
+    listKind: IPPoolList
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - subnet
+                - allocations
+              properties:
+                subnet:
+                  type: string
+                gateway:
+                  type: string
+                allocations:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      addresses:
+                        type: array
+                        items:
+                          type: string
+                      rangeStart:
+                        type: string
+                      rangeEnd:
+                        type: string
+                reservations:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      addresses:
+                        type: array
+                        items:
+                          type: string
+                      rangeStart:
+                        type: string
+                      rangeEnd:
+                        type: string
+                routes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      destination:
+                        type: string
+                      gateway:
+                        type: string
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys:
+                    - type
+                  items:
+                    type: object
+                    required:
+                      - type
+                      - status
+                      - lastTransitionTime
+                      - reason
+                      - message
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                      observedGeneration:
+                        type: integer
+                        format: int64
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      reason:
+                        type: string
+                      message:
+                        type: string
+      subresources:
+        status: {}

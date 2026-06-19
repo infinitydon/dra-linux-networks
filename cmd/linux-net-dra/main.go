@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -69,6 +70,10 @@ func main() {
 	if err != nil {
 		klog.Fatalf("create kube client: %v", err)
 	}
+	dynamicClient, err := dynamic.NewForConfig(restCfg)
+	if err != nil {
+		klog.Fatalf("create dynamic kube client: %v", err)
+	}
 
 	ready := false
 	mux := http.NewServeMux()
@@ -95,6 +100,7 @@ func main() {
 		StateFile:              stateFile,
 		Config:                 cfg,
 		Client:                 client,
+		DynamicClient:          dynamicClient,
 	})
 	if err != nil {
 		klog.Fatalf("start driver: %v", err)
