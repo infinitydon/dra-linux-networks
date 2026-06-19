@@ -110,3 +110,7 @@ Supported fields:
   accidentally advertising management NICs or control-plane interfaces.
 - A claim is expected to be reserved by one pod. Shared parent links are fine,
   but each generated pod interface is claim-specific.
+- Do not mix `macvlan` and `ipvlan` children on the same Linux parent interface
+  at the same time. Linux rejects that with `device or resource busy`. Use one
+  parent for macvlan workloads and a different parent for ipvlan workloads if
+  both families must run concurrently.
