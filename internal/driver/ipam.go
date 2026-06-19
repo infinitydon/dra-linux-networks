@@ -63,9 +63,6 @@ func (d *Driver) applyIPAM(netCfg *NetworkConfig, claimUID, podUID types.UID) er
 	}
 	netCfg.Address = address
 	netCfg.Addresses = []string{address}
-	if netCfg.Gateway == "" {
-		netCfg.Gateway = pool.Gateway
-	}
 	if len(netCfg.Routes) == 0 {
 		for _, route := range pool.Routes {
 			netCfg.Routes = append(netCfg.Routes, Route{

@@ -106,6 +106,10 @@ When `ipPool` is set and `address` is omitted, the driver reserves the next
 free address from the pool. When both are set, the driver validates and reserves
 the requested static address.
 
+Pool `gateway` is not automatically installed as a second default route because
+pods normally already have a default route from the primary CNI. Add an explicit
+claim `gateway` or `routes` entry when the secondary interface should own routes.
+
 ## Notes
 
 - This driver is not a Multus replacement for arbitrary CNI chaining. It is a
