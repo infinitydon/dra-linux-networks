@@ -8,6 +8,8 @@ const (
 	AttrMAC          = AttrPrefix + "/mac"
 	AttrMTU          = AttrPrefix + "/mtu"
 	AttrDefault      = AttrPrefix + "/default"
+	AttrMacvlan      = AttrPrefix + "/macvlan"
+	AttrIPvlan       = AttrPrefix + "/ipvlan"
 	AttrTypes        = AttrPrefix + "/types"
 	AttrMacvlanModes = AttrPrefix + "/macvlanModes"
 	AttrIPvlanModes  = AttrPrefix + "/ipvlanModes"

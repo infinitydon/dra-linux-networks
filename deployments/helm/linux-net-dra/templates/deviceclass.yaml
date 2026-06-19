@@ -10,6 +10,6 @@ spec:
     - cel:
         expression: >-
           device.driver == {{ .Values.driverName | squote }} &&
-          device.attributes[{{ printf "%s/interface" .Values.driverName | squote }}].string == {{ .Values.deviceClass.interfaceName | squote }} &&
-          {{ .Values.deviceClass.type | squote }} in device.attributes[{{ printf "%s/types" .Values.driverName | squote }}].string.split(',')
+          device.attributes[{{ .Values.driverName | squote }}].interface.string == {{ .Values.deviceClass.interfaceName | squote }} &&
+          device.attributes[{{ .Values.driverName | squote }}].{{ .Values.deviceClass.type }}.bool == true
 {{- end }}

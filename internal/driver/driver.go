@@ -455,6 +455,8 @@ func deviceAttributes(ifc config.InterfaceConfig, link netlink.Link) map[resourc
 	setString(AttrTypes, strings.Join(ifc.Types, ","))
 	setString(AttrMacvlanModes, strings.Join(ifc.MacvlanModes, ","))
 	setString(AttrIPvlanModes, strings.Join(ifc.IPvlanModes, ","))
+	setBool(AttrMacvlan, slices.Contains(ifc.Types, "macvlan"))
+	setBool(AttrIPvlan, slices.Contains(ifc.Types, "ipvlan"))
 	setBool(AttrDefault, ifc.Default)
 	setInt(AttrMTU, int64(link.Attrs().MTU))
 	return attrs

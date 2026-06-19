@@ -36,5 +36,5 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/infinitydon/dra-linux-networks:0.1.0
+            ghcr.io/infinitydon/dra-linux-networks:0.1.1
             ghcr.io/infinitydon/dra-linux-networks:latest
