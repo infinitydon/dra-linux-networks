@@ -20,6 +20,8 @@ type NetworkConfig struct {
 	Mode          string   `json:"mode,omitempty"`
 	InterfaceName string   `json:"interfaceName,omitempty"`
 	MTU           int      `json:"mtu,omitempty"`
+	IPPool        string   `json:"ipPool,omitempty"`
+	Address       string   `json:"address,omitempty"`
 	Addresses     []string `json:"addresses,omitempty"`
 	Gateway       string   `json:"gateway,omitempty"`
 	Routes        []Route  `json:"routes,omitempty"`
@@ -43,4 +45,11 @@ type PodConfig struct {
 	PodUID  types.UID               `json:"podUID"`
 	NetNS   string                  `json:"netns,omitempty"`
 	Devices map[string]DeviceConfig `json:"devices"`
+}
+
+type IPAllocation struct {
+	Pool     string    `json:"pool"`
+	Address  string    `json:"address"`
+	ClaimUID types.UID `json:"claimUID"`
+	PodUID   types.UID `json:"podUID"`
 }

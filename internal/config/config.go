@@ -11,6 +11,7 @@ const DefaultDriverName = "linux-net.dra.infinitydon.com"
 type Config struct {
 	DriverName string            `json:"driverName"`
 	Interfaces []InterfaceConfig `json:"interfaces"`
+	IPPools    []IPPool          `json:"ipPools"`
 }
 
 type InterfaceConfig struct {
@@ -23,6 +24,20 @@ type InterfaceConfig struct {
 	DefaultMode    string   `json:"defaultMode"`
 	DefaultPodName string   `json:"defaultPodInterfaceName"`
 	MTU            int      `json:"mtu"`
+}
+
+type IPPool struct {
+	Name       string  `json:"name"`
+	Subnet     string  `json:"subnet"`
+	RangeStart string  `json:"rangeStart"`
+	RangeEnd   string  `json:"rangeEnd"`
+	Gateway    string  `json:"gateway"`
+	Routes     []Route `json:"routes"`
+}
+
+type Route struct {
+	Destination string `json:"destination"`
+	Gateway     string `json:"gateway"`
 }
 
 func Load(path string) (*Config, error) {
@@ -62,6 +77,20 @@ func Load(path string) (*Config, error) {
 		}
 		if cfg.Interfaces[i].DefaultPodName == "" {
 			cfg.Interfaces[i].DefaultPodName = "net1"
+		}
+	}
+	for i := range cfg.IPPools {
+		if cfg.IPPools[i].Name == "" {
+			return nil, fmt.Errorf("ipPools[%d].name is required", i)
+		}
+		if cfg.IPPools[i].Subnet == "" {
+			return nil, fmt.Errorf("ipPools[%d].subnet is required", i)
+		}
+		if cfg.IPPools[i].RangeStart == "" {
+			return nil, fmt.Errorf("ipPools[%d].rangeStart is required", i)
+		}
+		if cfg.IPPools[i].RangeEnd == "" {
+			return nil, fmt.Errorf("ipPools[%d].rangeEnd is required", i)
 		}
 	}
 	return cfg, nil

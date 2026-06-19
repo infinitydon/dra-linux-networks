@@ -8,5 +8,6 @@ data:
   config.json: |
     {
       "driverName": {{ .Values.driverName | quote }},
-      "interfaces": {{ .Values.interfaces | toJson }}
+      "interfaces": {{ .Values.interfaces | toJson }},
+      "ipPools": {{ .Values.ipPools | toJson }}
     }

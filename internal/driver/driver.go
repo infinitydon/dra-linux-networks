@@ -52,6 +52,7 @@ type Driver struct {
 	nri        stub.Stub
 	store      *Store
 	devices    map[string]config.InterfaceConfig
+	ipPools    map[string]config.IPPool
 }
 
 func Start(ctx context.Context, opts Options) (*Driver, error) {
@@ -83,10 +84,14 @@ func Start(ctx context.Context, opts Options) (*Driver, error) {
 		client:     opts.Client,
 		store:      store,
 		devices:    map[string]config.InterfaceConfig{},
+		ipPools:    map[string]config.IPPool{},
 	}
 
 	for _, ifc := range opts.Config.Interfaces {
 		d.devices[deviceName(ifc.Name)] = ifc
+	}
+	for _, pool := range opts.Config.IPPools {
+		d.ipPools[pool.Name] = pool
 	}
 
 	pluginPath := filepath.Join(opts.KubeletPluginsDir, opts.DriverName)
@@ -216,6 +221,9 @@ func (d *Driver) prepareClaim(_ context.Context, claim *resourceapi.ResourceClai
 			mergeConfig(&netCfg, userCfg)
 		}
 		if err := validateConfig(ifc, netCfg); err != nil {
+			return kubeletplugin.PrepareResult{Err: err}
+		}
+		if err := d.applyIPAM(&netCfg, claim.UID, types.UID(reserved.UID)); err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
 		}
 
@@ -477,6 +485,12 @@ func mergeConfig(dst *NetworkConfig, src NetworkConfig) {
 	}
 	if src.MTU > 0 {
 		dst.MTU = src.MTU
+	}
+	if src.IPPool != "" {
+		dst.IPPool = src.IPPool
+	}
+	if src.Address != "" {
+		dst.Address = src.Address
 	}
 	if len(src.Addresses) > 0 {
 		dst.Addresses = src.Addresses

@@ -87,9 +87,7 @@ opaque:
     mode: bridge
     interfaceName: net1
     mtu: 9000
-    addresses:
-      - 10.55.20.10/24
-    gateway: 10.55.20.1
+    ipPool: lan-88
 ```
 
 Supported fields:
@@ -98,9 +96,15 @@ Supported fields:
 - `mode`: macvlan `bridge`, `private`, `vepa`, `passthru`; ipvlan `l2`, `l3`, `l3s`
 - `interfaceName`: interface name inside the pod, default `net1`
 - `mtu`: pod interface MTU
-- `addresses`: static addresses in CIDR notation
+- `ipPool`: named pool from Helm values
+- `address`: optional static address from that pool, for example `192.168.88.10/24`
+- `addresses`: direct static addresses in CIDR notation, mostly for testing or advanced use
 - `gateway`: default IPv4 gateway
 - `routes`: additional routes with `destination` and `gateway`
+
+When `ipPool` is set and `address` is omitted, the driver reserves the next
+free address from the pool. When both are set, the driver validates and reserves
+the requested static address.
 
 ## Notes
 

@@ -13,11 +13,22 @@ import (
 type Store struct {
 	path string
 	mu   sync.Mutex
-	pods map[types.UID]PodConfig
+	State
+}
+
+type State struct {
+	Pods          map[types.UID]PodConfig    `json:"pods"`
+	IPAllocations map[types.UID]IPAllocation `json:"ipAllocations"`
 }
 
 func NewStore(path string) (*Store, error) {
-	s := &Store{path: path, pods: map[types.UID]PodConfig{}}
+	s := &Store{
+		path: path,
+		State: State{
+			Pods:          map[types.UID]PodConfig{},
+			IPAllocations: map[types.UID]IPAllocation{},
+		},
+	}
 	if path == "" {
 		return s, nil
 	}
@@ -29,9 +40,25 @@ func NewStore(path string) (*Store, error) {
 		return nil, err
 	}
 	if len(data) > 0 {
-		if err := json.Unmarshal(data, &s.pods); err != nil {
-			return nil, err
+		if err := json.Unmarshal(data, &s.State); err != nil {
+			legacy := map[types.UID]PodConfig{}
+			if legacyErr := json.Unmarshal(data, &legacy); legacyErr != nil {
+				return nil, err
+			}
+			s.Pods = legacy
 		}
+		if s.Pods == nil {
+			legacy := map[types.UID]PodConfig{}
+			if legacyErr := json.Unmarshal(data, &legacy); legacyErr == nil && len(legacy) > 0 {
+				s.Pods = legacy
+			}
+		}
+	}
+	if s.Pods == nil {
+		s.Pods = map[types.UID]PodConfig{}
+	}
+	if s.IPAllocations == nil {
+		s.IPAllocations = map[types.UID]IPAllocation{}
 	}
 	return s, nil
 }
@@ -39,56 +66,98 @@ func NewStore(path string) (*Store, error) {
 func (s *Store) SetDevice(podUID types.UID, deviceName string, cfg DeviceConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	pod := s.pods[podUID]
+	pod := s.Pods[podUID]
 	if pod.Devices == nil {
 		pod.PodUID = podUID
 		pod.Devices = map[string]DeviceConfig{}
 	}
 	pod.Devices[deviceName] = cfg
-	s.pods[podUID] = pod
+	s.Pods[podUID] = pod
 	return s.persistLocked()
 }
 
 func (s *Store) SetNetNS(podUID types.UID, netns string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	pod := s.pods[podUID]
+	pod := s.Pods[podUID]
 	pod.PodUID = podUID
 	pod.NetNS = netns
-	s.pods[podUID] = pod
+	s.Pods[podUID] = pod
 	return s.persistLocked()
 }
 
 func (s *Store) GetPod(podUID types.UID) (PodConfig, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	pod, ok := s.pods[podUID]
+	pod, ok := s.Pods[podUID]
 	return pod, ok
 }
 
 func (s *Store) DeletePod(podUID types.UID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.pods, podUID)
+	delete(s.Pods, podUID)
 	return s.persistLocked()
 }
 
 func (s *Store) DeleteClaim(claimUID types.UID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for podUID, pod := range s.pods {
+	for podUID, pod := range s.Pods {
 		for deviceName, cfg := range pod.Devices {
 			if cfg.ClaimUID == claimUID {
 				delete(pod.Devices, deviceName)
 			}
 		}
 		if len(pod.Devices) == 0 {
-			delete(s.pods, podUID)
+			delete(s.Pods, podUID)
 		} else {
-			s.pods[podUID] = pod
+			s.Pods[podUID] = pod
 		}
 	}
+	delete(s.IPAllocations, claimUID)
 	return s.persistLocked()
+}
+
+func (s *Store) ReserveIP(pool, address string, claimUID, podUID types.UID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if current, ok := s.IPAllocations[claimUID]; ok {
+		if current.Pool == pool && current.Address == address {
+			return nil
+		}
+		return errors.New("claim already has a different IP allocation")
+	}
+	for _, allocation := range s.IPAllocations {
+		if allocation.Pool == pool && allocation.Address == address {
+			return errors.New("IP address is already allocated")
+		}
+	}
+	s.IPAllocations[claimUID] = IPAllocation{
+		Pool:     pool,
+		Address:  address,
+		ClaimUID: claimUID,
+		PodUID:   podUID,
+	}
+	return s.persistLocked()
+}
+
+func (s *Store) AllocationForClaim(claimUID types.UID) (IPAllocation, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	allocation, ok := s.IPAllocations[claimUID]
+	return allocation, ok
+}
+
+func (s *Store) IsIPAllocated(pool, address string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, allocation := range s.IPAllocations {
+		if allocation.Pool == pool && allocation.Address == address {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) persistLocked() error {
@@ -98,7 +167,7 @@ func (s *Store) persistLocked() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0750); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(s.pods, "", "  ")
+	data, err := json.MarshalIndent(s.State, "", "  ")
 	if err != nil {
 		return err
 	}
