@@ -98,6 +98,20 @@ whose referenced `ResourceClaim` no longer exists or whose claim UID has changed
 and reports `allocated`, `dynamicAllocated`, and `staticAllocated` counts in
 `IPPool.status`. The local node state file is not used for cluster-wide locking.
 
+## Multi-node test
+
+The repeatable e2e suite pins static and dynamic workloads to separate workers,
+checks allocation ownership, gateway reachability, bidirectional secondary-network
+traffic, controller status, and resource cleanup:
+
+```bash
+KUBECONFIG=/path/to/kubeconfig go test -tags=e2e ./tests/e2e -v -args \
+  -static-node ebpf-bng-node-01 \
+  -dynamic-node ebpf-bng-node-02 \
+  -static-address 192.168.88.10/24 \
+  -gateway 192.168.88.1
+```
+
 ## Example
 
 Create a macvlan claim and pod:
