@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,7 +19,24 @@ import (
 	"k8s.io/client-go/util/retry"
 )
 
-const NetworkReadyCondition corev1.PodConditionType = AttrPrefix + "/NetworkReady"
+const (
+	NetworkReadyCondition   corev1.PodConditionType = AttrPrefix + "/NetworkReady"
+	NetworkStatusAnnotation                         = AttrPrefix + "/network-status"
+)
+
+type podNetworkStatus struct {
+	InterfaceName   string   `json:"interfaceName"`
+	IPs             []string `json:"ips,omitempty"`
+	HardwareAddress string   `json:"hardwareAddress,omitempty"`
+	IPPool          string   `json:"ipPool,omitempty"`
+	Gateway         string   `json:"gateway,omitempty"`
+	ParentInterface string   `json:"parentInterface"`
+	Type            string   `json:"type"`
+	Mode            string   `json:"mode,omitempty"`
+	ClaimNamespace  string   `json:"claimNamespace"`
+	ClaimName       string   `json:"claimName"`
+	State           string   `json:"state"`
+}
 
 func (d *Driver) setResourceClaimDeviceStatus(ctx context.Context, cfg DeviceConfig, ready bool, reason, message, hardwareAddress string) error {
 	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
@@ -175,6 +193,64 @@ func setPodCondition(conditions *[]corev1.PodCondition, condition corev1.PodCond
 		return
 	}
 	*conditions = append(*conditions, condition)
+}
+
+func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string, uid types.UID, cfg DeviceConfig) error {
+	return retry.RetryOnConflict(retry.DefaultBackoff, func() error {
+		pod, err := d.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		if pod.UID != uid {
+			return fmt.Errorf("Pod %s/%s UID changed", namespace, name)
+		}
+		statuses := []podNetworkStatus{}
+		if raw := pod.Annotations[NetworkStatusAnnotation]; raw != "" {
+			if err := json.Unmarshal([]byte(raw), &statuses); err != nil {
+				return fmt.Errorf("parse Pod network status annotation: %w", err)
+			}
+		}
+		status := podNetworkStatus{
+			InterfaceName:   cfg.Network.InterfaceName,
+			IPs:             slices.Clone(cfg.Network.Addresses),
+			HardwareAddress: cfg.HardwareAddress,
+			IPPool:          cfg.Network.IPPool,
+			Gateway:         cfg.Network.Gateway,
+			ParentInterface: cfg.ParentName,
+			Type:            cfg.Network.Type,
+			Mode:            cfg.Network.Mode,
+			ClaimNamespace:  cfg.Claim.Namespace,
+			ClaimName:       cfg.Claim.Name,
+			State:           "Attached",
+		}
+		replaced := false
+		for i := range statuses {
+			if statuses[i].ClaimNamespace == status.ClaimNamespace && statuses[i].ClaimName == status.ClaimName && statuses[i].InterfaceName == status.InterfaceName {
+				statuses[i] = status
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			statuses = append(statuses, status)
+		}
+		sort.Slice(statuses, func(i, j int) bool {
+			if statuses[i].InterfaceName == statuses[j].InterfaceName {
+				return statuses[i].ClaimName < statuses[j].ClaimName
+			}
+			return statuses[i].InterfaceName < statuses[j].InterfaceName
+		})
+		raw, err := json.Marshal(statuses)
+		if err != nil {
+			return err
+		}
+		if pod.Annotations == nil {
+			pod.Annotations = map[string]string{}
+		}
+		pod.Annotations[NetworkStatusAnnotation] = string(raw)
+		_, err = d.client.CoreV1().Pods(namespace).Update(ctx, pod, metav1.UpdateOptions{})
+		return err
+	})
 }
 
 func (d *Driver) emitPodEvent(ctx context.Context, pod *corev1.Pod, eventType, reason, action, note string, claim *types.NamespacedName) error {

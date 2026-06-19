@@ -99,6 +99,14 @@ func TestMultiNodeIPAMConnectivity(t *testing.T) {
 		}
 	})
 
+	t.Run("PodsPersistAttachedNetworkStatus", func(t *testing.T) {
+		for _, pod := range []string{staticPodName, dynamicPodName} {
+			status := mustKubectl(t, "-n", *namespace, "get", "pod", pod,
+				"-o", `jsonpath={.metadata.annotations.linux-net\.dra\.infinitydon\.com/network-status}`)
+			assertOutputContains(t, status, `"interfaceName":"net1"`, `"ipPool":"`+*poolName+`"`, `"state":"Attached"`)
+		}
+	})
+
 	t.Run("ResourceClaimsReportReadyNetworkData", func(t *testing.T) {
 		for _, pod := range []string{staticPodName, dynamicPodName} {
 			claim := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod,

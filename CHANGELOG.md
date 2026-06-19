@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.11
+
+- Persist attached secondary-network details in a driver-owned Pod annotation.
+- Extend status tests to cover durable Pod-level reporting after Events expire.
+
 ## v0.1.10
 
 - Report DRA-native network state in `ResourceClaim.status.devices`.

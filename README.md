@@ -201,6 +201,12 @@ The driver reports durable network state in the generated ResourceClaim under
 condition, `networkData.interfaceName`, assigned CIDR addresses, hardware
 address, and driver data containing the IPPool, link type, mode, and parent.
 
+The same attached state is summarized persistently on the Pod in the
+`linux-net.dra.infinitydon.com/network-status` annotation. Its JSON array
+contains the interface, addresses, MAC, IPPool, gateway, parent, link type and
+mode, ResourceClaim reference, and attachment state, so `kubectl describe pod`
+continues to show the network after Events expire.
+
 The driver also emits `LinuxNetworkPrepared`, `LinuxNetworkAttached`, and
 `LinuxNetworkAttachFailed` Events against the Pod, so the lifecycle appears in
 `kubectl describe pod`.
@@ -215,8 +221,9 @@ spec:
 
 For opted-in Pods, the driver owns that condition and sets it to `True` only
 after NRI has attached all requested secondary interfaces. ResourceClaim status
-is the durable source of truth; Events are supplemental and expire according to
-the cluster Event retention policy.
+is the DRA-native source of truth, the Pod annotation is its durable Pod-level
+summary, and Events are supplemental records that expire according to the
+cluster Event retention policy.
 
 Pool `gateway` is not automatically installed as a second default route because
 pods normally already have a default route from the primary CNI. Add an explicit

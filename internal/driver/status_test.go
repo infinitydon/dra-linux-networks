@@ -2,6 +2,7 @@ package driver
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -82,5 +83,47 @@ func TestPodNetworkConditionRequiresReadinessGate(t *testing.T) {
 				t.Fatalf("NetworkReady conditions = %d, want %d", count, test.wantCount)
 			}
 		})
+	}
+}
+
+func TestPodNetworkStatusAnnotationIsDurableAndMerged(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Namespace: "default", Name: "pod-a", UID: types.UID("pod-uid"),
+		Annotations: map[string]string{"unrelated.example/key": "keep"},
+	}}
+	client := kubernetesfake.NewSimpleClientset(pod)
+	driver := &Driver{client: client}
+	for _, cfg := range []DeviceConfig{
+		{
+			Claim: types.NamespacedName{Namespace: "default", Name: "claim-b"}, ParentName: "enp9s0",
+			Network:         NetworkConfig{Type: "ipvlan", Mode: "l2", InterfaceName: "net2", IPPool: "lan-89", Addresses: []string{"192.168.89.11/24"}},
+			HardwareAddress: "02:00:00:00:00:02",
+		},
+		{
+			Claim: types.NamespacedName{Namespace: "default", Name: "claim-a"}, ParentName: "enp8s20",
+			Network:         NetworkConfig{Type: "macvlan", Mode: "bridge", InterfaceName: "net1", IPPool: "lan-88", Gateway: "192.168.88.1", Addresses: []string{"192.168.88.11/24"}},
+			HardwareAddress: "02:00:00:00:00:01",
+		},
+	} {
+		if err := driver.setPodNetworkStatus(context.Background(), "default", "pod-a", pod.UID, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	updated, err := client.CoreV1().Pods("default").Get(context.Background(), "pod-a", metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Annotations["unrelated.example/key"] != "keep" {
+		t.Fatal("unrelated annotation was not preserved")
+	}
+	var statuses []podNetworkStatus
+	if err := json.Unmarshal([]byte(updated.Annotations[NetworkStatusAnnotation]), &statuses); err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 2 || statuses[0].InterfaceName != "net1" || statuses[1].InterfaceName != "net2" {
+		t.Fatalf("unexpected statuses: %+v", statuses)
+	}
+	if statuses[0].IPs[0] != "192.168.88.11/24" || statuses[0].IPPool != "lan-88" || statuses[0].State != "Attached" {
+		t.Fatalf("unexpected net1 status: %+v", statuses[0])
 	}
 }

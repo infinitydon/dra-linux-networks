@@ -474,6 +474,10 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 			_ = d.emitPodEvent(ctx, kubePod, corev1.EventTypeWarning, "LinuxNetworkStatusUpdateFailed", "ReportNetworkStatus", err.Error(), &cfg.Claim)
 			return fmt.Errorf("report attached device status: %w", err)
 		}
+		if err := d.setPodNetworkStatus(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, cfg); err != nil {
+			_ = d.emitPodEvent(ctx, kubePod, corev1.EventTypeWarning, "LinuxNetworkStatusUpdateFailed", "ReportNetworkStatus", err.Error(), &cfg.Claim)
+			return fmt.Errorf("report Pod network status: %w", err)
+		}
 		if err := d.emitPodEvent(ctx, kubePod, corev1.EventTypeNormal, "LinuxNetworkAttached", "AttachNetwork", message, &cfg.Claim); err != nil {
 			klog.ErrorS(err, "Could not emit Pod event", "pod", klog.KObj(kubePod))
 		}
