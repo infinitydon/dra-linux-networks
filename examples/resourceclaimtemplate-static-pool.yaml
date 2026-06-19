@@ -25,6 +25,7 @@ kind: Pod
 metadata:
   name: linux-net-static-pool-test
   annotations:
+    linux-net.dra.infinitydon.com/net1.ip-pool: lan-88
     linux-net.dra.infinitydon.com/net1.address: 192.168.88.10/24
 spec:
   restartPolicy: Never

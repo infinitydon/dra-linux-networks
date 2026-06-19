@@ -223,6 +223,7 @@ metadata:
   name: %[4]s
   namespace: %[2]s
   annotations:
+    linux-net.dra.infinitydon.com/net1.ip-pool: %[3]s
     linux-net.dra.infinitydon.com/net1.address: %[5]s
 spec:
   nodeSelector:

@@ -33,6 +33,10 @@ The control-plane node is intentionally excluded by using a node label selector.
 
 ## Install
 
+Versioned source and packaged Helm charts are published on the
+[GitHub Releases page](https://github.com/infinitydon/dra-linux-networks/releases).
+Container images are published at `ghcr.io/infinitydon/dra-linux-networks`.
+
 Label the worker node that should advertise Linux network DRA resources:
 
 ```bash
@@ -166,11 +170,14 @@ the Pod instead of the template:
 ```yaml
 metadata:
   annotations:
+    linux-net.dra.infinitydon.com/net1.ip-pool: lan-88
     linux-net.dra.infinitydon.com/net1.address: 192.168.88.10/24
 ```
 
 The annotation key may use either the DRA request name or the pod interface
-name. The requested IP must be covered by the referenced `IPPool` reservation.
+name. The `ip-pool` annotation is required with `address` and must match the
+`ipPool` in the ResourceClaim configuration. The requested IP must be covered
+by that `IPPool` reservation. Missing or mismatched pool references are rejected.
 
 Pool `gateway` is not automatically installed as a second default route because
 pods normally already have a default route from the primary CNI. Add an explicit

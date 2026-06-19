@@ -289,20 +289,32 @@ func (d *Driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 	return result, nil
 }
 
-func podAddressAnnotation(annotations map[string]string, request, interfaceName string) string {
+func podStaticAddress(annotations map[string]string, request, interfaceName, expectedPool string) (string, error) {
 	if len(annotations) == 0 {
-		return ""
+		return "", nil
 	}
-	keys := []string{
-		AttrPrefix + "/" + request + ".address",
-		AttrPrefix + "/" + interfaceName + ".address",
+	bases := []string{
+		AttrPrefix + "/" + request,
+		AttrPrefix + "/" + interfaceName,
 	}
-	for _, key := range keys {
-		if value := strings.TrimSpace(annotations[key]); value != "" {
-			return value
+	for _, base := range bases {
+		address := strings.TrimSpace(annotations[base+".address"])
+		pool := strings.TrimSpace(annotations[base+".ip-pool"])
+		if address == "" && pool == "" {
+			continue
 		}
+		if address == "" || pool == "" {
+			return "", fmt.Errorf("pod static network annotations %s.address and %s.ip-pool must be set together", base, base)
+		}
+		if expectedPool == "" {
+			return "", fmt.Errorf("pod static network annotation %s.address requires ipPool in the ResourceClaim configuration", base)
+		}
+		if pool != expectedPool {
+			return "", fmt.Errorf("pod static network annotation %s.ip-pool=%q does not match ResourceClaim ipPool=%q", base, pool, expectedPool)
+		}
+		return address, nil
 	}
-	return ""
+	return "", nil
 }
 
 func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
@@ -342,7 +354,11 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 		} else {
 			mergeConfig(&netCfg, userCfg)
 		}
-		if address := podAddressAnnotation(pod.Annotations, allocation.Request, netCfg.InterfaceName); address != "" {
+		address, err := podStaticAddress(pod.Annotations, allocation.Request, netCfg.InterfaceName, netCfg.IPPool)
+		if err != nil {
+			return kubeletplugin.PrepareResult{Err: err}
+		}
+		if address != "" {
 			netCfg.Address = address
 		}
 		if err := validateConfig(ifc, netCfg); err != nil {
