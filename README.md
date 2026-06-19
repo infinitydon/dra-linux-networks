@@ -147,6 +147,17 @@ kubectl apply -f examples/resourceclaimtemplate-ipvlan.yaml
 kubectl exec -it linux-net-ipvlan-test -- ip addr show net1
 ```
 
+Create a three-replica Deployment with one dynamic claim per Pod:
+
+```bash
+kubectl apply -f examples/deployment-dynamic-pool.yaml
+kubectl get pods -l app=linux-net-dynamic-deployment -o wide
+kubectl get lnipa
+```
+
+Test workloads pin netshoot to the immutable `v0.15` image digest so repeated
+runs use the same userspace tooling.
+
 ## Claim Parameters
 
 Workloads pass network intent through DRA opaque configuration:

@@ -274,7 +274,7 @@ spec:
       resourceClaimTemplateName: %[1]s
   containers:
     - name: network-test
-      image: nicolaka/netshoot:latest
+      image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61
       command: ["sleep", "3600"]
       resources:
         claims:
@@ -296,7 +296,7 @@ spec:
       resourceClaimTemplateName: %[1]s
   containers:
     - name: network-test
-      image: nicolaka/netshoot:latest
+      image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61
       command: ["sleep", "3600"]
       resources:
         claims:

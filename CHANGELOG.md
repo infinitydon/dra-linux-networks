@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Pin netshoot test workloads to the immutable `v0.15` image digest.
+- Add a three-replica dynamic-allocation Deployment example.
+
 ## v0.1.11
 
 - Persist attached secondary-network details in a driver-owned Pod annotation.
