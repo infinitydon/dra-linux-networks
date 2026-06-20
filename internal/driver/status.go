@@ -240,7 +240,7 @@ func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string
 			}
 			return statuses[i].InterfaceName < statuses[j].InterfaceName
 		})
-		raw, err := json.Marshal(statuses)
+		raw, err := json.MarshalIndent(statuses, "", "    ")
 		if err != nil {
 			return err
 		}

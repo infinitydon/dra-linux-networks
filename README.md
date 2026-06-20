@@ -216,7 +216,8 @@ The same attached state is summarized persistently on the Pod in the
 `linux-net.dra.infinitydon.com/network-status` annotation. Its JSON array
 contains the interface, addresses, MAC, IPPool, gateway, parent, link type and
 mode, ResourceClaim reference, and attachment state, so `kubectl describe pod`
-continues to show the network after Events expire.
+continues to show the network after Events expire. The JSON is stored with
+multiline indentation so `kubectl describe pod` keeps each field readable.
 
 The driver also emits `LinuxNetworkPrepared`, `LinuxNetworkAttached`, and
 `LinuxNetworkAttachFailed` Events against the Pod, so the lifecycle appears in

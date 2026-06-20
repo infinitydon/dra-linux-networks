@@ -3,6 +3,7 @@ package driver
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -125,5 +126,8 @@ func TestPodNetworkStatusAnnotationIsDurableAndMerged(t *testing.T) {
 	}
 	if statuses[0].IPs[0] != "192.168.88.11/24" || statuses[0].IPPool != "lan-88" || statuses[0].State != "Attached" {
 		t.Fatalf("unexpected net1 status: %+v", statuses[0])
+	}
+	if raw := updated.Annotations[NetworkStatusAnnotation]; !strings.Contains(raw, "\n") || !strings.Contains(raw, `    "interfaceName": "net1"`) {
+		t.Fatalf("network status is not pretty-printed: %q", raw)
 	}
 }

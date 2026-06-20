@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.1.12
 
 - Pin netshoot test workloads to the immutable `v0.15` image digest.
 - Add a three-replica dynamic-allocation Deployment example.
+- Pretty-print the persistent Pod network-status annotation for readable output.
 
 ## v0.1.11
 
