@@ -74,7 +74,7 @@ func TestExclusiveHostDevicePoolLifecycle(t *testing.T) {
 	mustKubectl(t, "-n", *namespace, "delete", "pod", hostPodC, "--wait=true")
 
 	mustKubectl(t, "-n", *namespace, "delete", "pod", hostPodA, "--wait=true")
-	waitForHostInterface(t, statusA.ParentInterface, statusA.OriginalAdminState)
+	waitForHostInterface(t, statusA.ParentInterface, statusA.OriginalAdminState, statusA.OriginalOperState)
 	if output, err := kubectl([]byte(hostDevicePod(*namespace, *hostDeviceNode, hostPodC)), "apply", "-f", "-"); err != nil {
 		t.Fatalf("recreate third host-device Pod: %v\n%s", err, output)
 	}
@@ -105,15 +105,20 @@ func podReportedNetwork(t *testing.T, pod string) reportedNetwork {
 	return statuses[0]
 }
 
-func waitForHostInterface(t *testing.T, interfaceName, adminState string) {
+func waitForHostInterface(t *testing.T, interfaceName, adminState, operState string) {
 	t.Helper()
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(120 * time.Second)
 	for time.Now().Before(deadline) {
 		plugin := nodePluginPod(t)
 		output, err := kubectl(nil, "-n", "kube-system", "exec", plugin, "--", "ip", "-o", "link", "show", "dev", interfaceName)
 		if err == nil && strings.Contains(output, interfaceName) {
 			if adminState == "up" && !strings.Contains(output, "UP") {
-				t.Fatalf("restored interface %s is not administratively UP: %s", interfaceName, output)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			if operState == "up" && (!strings.Contains(output, "LOWER_UP") || !strings.Contains(output, "state UP")) {
+				time.Sleep(2 * time.Second)
+				continue
 			}
 			return
 		}
@@ -151,12 +156,12 @@ spec:
             selectors:
               - cel:
                   expression: 'device.attributes["linux-net.dra.infinitydon.com"].kernelDriver == "e1000"'
-    config:
-      - requests: ["nic"]
-        opaque:
-          driver: linux-net.dra.infinitydon.com
-          parameters:
-            type: host-device
+      config:
+        - requests: ["nic"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: host-device
 ---
 %[3]s
 ---

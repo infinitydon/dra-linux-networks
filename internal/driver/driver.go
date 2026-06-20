@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -714,6 +715,8 @@ func addRoute(link netlink.Link, dst, gw string) error {
 }
 
 func inNetNS(target netns.NsHandle, fn func() error) error {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	current, err := netns.Get()
 	if err != nil {
 		return err
