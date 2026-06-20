@@ -21,3 +21,15 @@ make test-e2e-multi-node \
   STATIC_NODE=ebpf-bng-node-01 \
   DYNAMIC_NODE=ebpf-bng-node-02
 ```
+
+Run the exclusive host-device pool lifecycle test on the worker with the
+configured NIC list:
+
+```bash
+KUBECONFIG=/path/to/kubeconfig go test -tags=e2e ./tests/e2e -v -args \
+  -host-device-node ebpf-bng-node-02
+```
+
+The test assigns two different physical NICs, verifies a third Pod cannot
+schedule, checks name and administrative-state restoration, and then verifies
+the released NIC can be allocated again.

@@ -25,17 +25,25 @@ const (
 )
 
 type podNetworkStatus struct {
-	InterfaceName   string   `json:"interfaceName"`
-	IPs             []string `json:"ips,omitempty"`
-	HardwareAddress string   `json:"hardwareAddress,omitempty"`
-	IPPool          string   `json:"ipPool,omitempty"`
-	Gateway         string   `json:"gateway,omitempty"`
-	ParentInterface string   `json:"parentInterface"`
-	Type            string   `json:"type"`
-	Mode            string   `json:"mode,omitempty"`
-	ClaimNamespace  string   `json:"claimNamespace"`
-	ClaimName       string   `json:"claimName"`
-	State           string   `json:"state"`
+	InterfaceName      string   `json:"interfaceName"`
+	IPs                []string `json:"ips,omitempty"`
+	HardwareAddress    string   `json:"hardwareAddress,omitempty"`
+	IPPool             string   `json:"ipPool,omitempty"`
+	Gateway            string   `json:"gateway,omitempty"`
+	ParentInterface    string   `json:"parentInterface"`
+	Type               string   `json:"type"`
+	Mode               string   `json:"mode,omitempty"`
+	ClaimNamespace     string   `json:"claimNamespace"`
+	ClaimName          string   `json:"claimName"`
+	State              string   `json:"state"`
+	KernelDriver       string   `json:"kernelDriver,omitempty"`
+	BusType            string   `json:"busType,omitempty"`
+	PCIAddress         string   `json:"pciAddress,omitempty"`
+	PCIVendorID        string   `json:"pciVendorID,omitempty"`
+	PCIDeviceID        string   `json:"pciDeviceID,omitempty"`
+	AllocationPolicy   string   `json:"allocationPolicy,omitempty"`
+	OriginalAdminState string   `json:"originalAdminState,omitempty"`
+	OriginalOperState  string   `json:"originalOperState,omitempty"`
 }
 
 func (d *Driver) setResourceClaimDeviceStatus(ctx context.Context, cfg DeviceConfig, ready bool, reason, message, hardwareAddress string) error {
@@ -68,14 +76,28 @@ func (d *Driver) setResourceClaimDeviceStatus(ctx context.Context, cfg DeviceCon
 }
 
 func allocatedDeviceStatus(claim *resourceapi.ResourceClaim, cfg DeviceConfig, ready bool, reason, message, hardwareAddress string) (resourceapi.AllocatedDeviceStatus, error) {
-	data, err := json.Marshal(map[string]interface{}{
-		"ipPool":          cfg.Network.IPPool,
-		"type":            cfg.Network.Type,
-		"mode":            cfg.Network.Mode,
-		"parentInterface": cfg.ParentName,
-		"gateway":         cfg.Network.Gateway,
-		"routes":          cfg.Network.Routes,
-	})
+	dataValues := map[string]interface{}{
+		"ipPool":            cfg.Network.IPPool,
+		"type":              cfg.Network.Type,
+		"mode":              cfg.Network.Mode,
+		"parentInterface":   cfg.ParentName,
+		"gateway":           cfg.Network.Gateway,
+		"routes":            cfg.Network.Routes,
+		"kernelDriver":      cfg.Identity.KernelDriver,
+		"busType":           cfg.Identity.BusType,
+		"pciAddress":        cfg.Identity.PCIAddress,
+		"pciVendorID":       cfg.Identity.PCIVendorID,
+		"pciDeviceID":       cfg.Identity.PCIDeviceID,
+		"allocationPolicy":  cfg.AllocationPolicy,
+		"hostInterfaceName": cfg.ParentName,
+		"lifecycleState":    networkLifecycleState(cfg),
+	}
+	if cfg.HostDevice != nil {
+		dataValues["originalAdminState"] = originalAdminState(cfg)
+		dataValues["originalOperState"] = cfg.HostDevice.OriginalOperState
+		dataValues["originalMTU"] = cfg.HostDevice.OriginalMTU
+	}
+	data, err := json.Marshal(dataValues)
 	if err != nil {
 		return resourceapi.AllocatedDeviceStatus{}, err
 	}
@@ -106,7 +128,7 @@ func allocatedDeviceStatus(claim *resourceapi.ResourceClaim, cfg DeviceConfig, r
 		Data:       &runtime.RawExtension{Raw: data},
 		NetworkData: &resourceapi.NetworkDeviceData{
 			InterfaceName:   cfg.Network.InterfaceName,
-			IPs:             slices.Clone(cfg.Network.Addresses),
+			IPs:             reportedAddresses(cfg),
 			HardwareAddress: hardwareAddress,
 		},
 	}, nil
@@ -211,17 +233,30 @@ func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string
 			}
 		}
 		status := podNetworkStatus{
-			InterfaceName:   cfg.Network.InterfaceName,
-			IPs:             slices.Clone(cfg.Network.Addresses),
-			HardwareAddress: cfg.HardwareAddress,
-			IPPool:          cfg.Network.IPPool,
-			Gateway:         cfg.Network.Gateway,
-			ParentInterface: cfg.ParentName,
-			Type:            cfg.Network.Type,
-			Mode:            cfg.Network.Mode,
-			ClaimNamespace:  cfg.Claim.Namespace,
-			ClaimName:       cfg.Claim.Name,
-			State:           "Attached",
+			InterfaceName:    cfg.Network.InterfaceName,
+			IPs:              reportedAddresses(cfg),
+			HardwareAddress:  cfg.HardwareAddress,
+			IPPool:           cfg.Network.IPPool,
+			Gateway:          cfg.Network.Gateway,
+			ParentInterface:  cfg.ParentName,
+			Type:             cfg.Network.Type,
+			Mode:             cfg.Network.Mode,
+			ClaimNamespace:   cfg.Claim.Namespace,
+			ClaimName:        cfg.Claim.Name,
+			State:            networkLifecycleState(cfg),
+			KernelDriver:     cfg.Identity.KernelDriver,
+			BusType:          cfg.Identity.BusType,
+			PCIAddress:       cfg.Identity.PCIAddress,
+			PCIVendorID:      cfg.Identity.PCIVendorID,
+			PCIDeviceID:      cfg.Identity.PCIDeviceID,
+			AllocationPolicy: cfg.AllocationPolicy,
+		}
+		if cfg.HostDevice != nil {
+			status.OriginalAdminState = "down"
+			if cfg.HostDevice.OriginalAdminUp {
+				status.OriginalAdminState = "up"
+			}
+			status.OriginalOperState = cfg.HostDevice.OriginalOperState
 		}
 		replaced := false
 		for i := range statuses {
@@ -289,14 +324,42 @@ func (d *Driver) emitPodEvent(ctx context.Context, pod *corev1.Pod, eventType, r
 
 func networkStatusMessage(cfg DeviceConfig) string {
 	parts := []string{fmt.Sprintf("%s attached as %s", cfg.Network.Type, cfg.Network.InterfaceName)}
-	if len(cfg.Network.Addresses) > 0 {
-		parts = append(parts, "address "+strings.Join(cfg.Network.Addresses, ","))
+	if addresses := reportedAddresses(cfg); len(addresses) > 0 {
+		parts = append(parts, "address "+strings.Join(addresses, ","))
 	}
 	if cfg.Network.IPPool != "" {
 		parts = append(parts, "IPPool "+cfg.Network.IPPool)
 	}
 	parts = append(parts, "parent "+cfg.ParentName)
 	return strings.Join(parts, ", ")
+}
+
+func reportedAddresses(cfg DeviceConfig) []string {
+	if len(cfg.Network.Addresses) > 0 {
+		return slices.Clone(cfg.Network.Addresses)
+	}
+	if cfg.HostDevice != nil {
+		return slices.Clone(cfg.HostDevice.OriginalAddresses)
+	}
+	return nil
+}
+
+func networkLifecycleState(cfg DeviceConfig) string {
+	if cfg.LifecycleState != "" {
+		return cfg.LifecycleState
+	}
+	return "Attached"
+}
+
+func networkRestoredMessage(cfg DeviceConfig) string {
+	return fmt.Sprintf("host device restored as %s, driver %s, PCI %s, admin state %s", cfg.ParentName, cfg.Identity.KernelDriver, cfg.Identity.PCIAddress, originalAdminState(cfg))
+}
+
+func originalAdminState(cfg DeviceConfig) string {
+	if cfg.HostDevice != nil && cfg.HostDevice.OriginalAdminUp {
+		return "up"
+	}
+	return "down"
 }
 
 func networkPreparedMessage(cfg DeviceConfig) string {

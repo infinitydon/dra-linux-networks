@@ -125,6 +125,7 @@ func Start(ctx context.Context, opts Options) (*Driver, error) {
 		h.Stop()
 		return nil, err
 	}
+	go d.publishLoop(ctx)
 
 	nri, err := stub.New(d,
 		stub.WithPluginName(opts.DriverName),
@@ -171,13 +172,23 @@ func (d *Driver) publish(ctx context.Context) error {
 	for _, ifc := range d.cfg.Interfaces {
 		link, err := netlink.LinkByName(ifc.Name)
 		if err != nil {
-			klog.ErrorS(err, "configured interface is not present, skipping", "interface", ifc.Name)
+			ifcState, ok := d.storedInterface(ifc.Name)
+			if !ok {
+				klog.ErrorS(err, "configured interface is not present, skipping", "interface", ifc.Name)
+				continue
+			}
+			allowMultiple := ifc.AllocationPolicy == "shared"
+			devices = append(devices, resourceapi.Device{
+				Name:                     deviceName(ifc.Name),
+				Attributes:               storedDeviceAttributes(ifc, ifcState),
+				AllowMultipleAllocations: &allowMultiple,
+			})
 			continue
 		}
-		allowMultiple := true
+		allowMultiple := ifc.AllocationPolicy == "shared"
 		devices = append(devices, resourceapi.Device{
 			Name:                     deviceName(ifc.Name),
-			Attributes:               deviceAttributes(ifc, link),
+			Attributes:               deviceAttributes(ifc, link, interfaceIdentity(ifc.Name)),
 			AllowMultipleAllocations: &allowMultiple,
 		})
 	}
@@ -187,6 +198,32 @@ func (d *Driver) publish(ctx context.Context) error {
 		},
 	}
 	return d.helper.PublishResources(ctx, resources)
+}
+
+func (d *Driver) publishLoop(ctx context.Context) {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := d.publish(ctx); err != nil {
+				klog.ErrorS(err, "Could not refresh network device inventory")
+			}
+		}
+	}
+}
+
+func (d *Driver) storedInterface(name string) (DeviceConfig, bool) {
+	for _, pod := range d.store.PodConfigs() {
+		for _, cfg := range pod.Devices {
+			if cfg.ParentName == name && cfg.Network.Type == "host-device" && cfg.HostDevice != nil && !cfg.HostDevice.Restored {
+				return cfg, true
+			}
+		}
+	}
+	return DeviceConfig{}, false
 }
 
 func (d *Driver) reloadIPPools(ctx context.Context) {
@@ -355,6 +392,9 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 		} else {
 			mergeConfig(&netCfg, userCfg)
 		}
+		if netCfg.Type == "host-device" && netCfg.InterfaceName == "" {
+			netCfg.InterfaceName = ifc.Name
+		}
 		address, err := podStaticAddress(pod.Annotations, allocation.Request, netCfg.InterfaceName, netCfg.IPPool)
 		if err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
@@ -375,15 +415,40 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			shareID = &value
 		}
 		deviceCfg := DeviceConfig{
-			Claim:      types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name},
-			ClaimUID:   claim.UID,
-			DriverName: allocation.Driver,
-			PoolName:   allocation.Pool,
-			DeviceName: allocation.Device,
-			ShareID:    shareID,
-			ParentName: ifc.Name,
-			Network:    netCfg,
+			Claim:            types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name},
+			ClaimUID:         claim.UID,
+			DriverName:       allocation.Driver,
+			PoolName:         allocation.Pool,
+			DeviceName:       allocation.Device,
+			ShareID:          shareID,
+			ParentName:       ifc.Name,
+			AllocationPolicy: ifc.AllocationPolicy,
+			Identity:         interfaceIdentity(ifc.Name),
+			Network:          netCfg,
 		}
+		if netCfg.Type == "host-device" {
+			if existingPod, ok := d.store.GetPod(types.UID(reserved.UID)); ok {
+				if existing, found := existingPod.Devices[allocation.Device]; found && existing.ClaimUID == claim.UID && existing.HostDevice != nil {
+					deviceCfg = existing
+				}
+			}
+			if deviceCfg.HostDevice == nil {
+				link, err := netlink.LinkByName(ifc.Name)
+				if err != nil {
+					return kubeletplugin.PrepareResult{Err: fmt.Errorf("inspect host device %s: %w", ifc.Name, err)}
+				}
+				deviceCfg.HostDevice, err = snapshotHostDevice(link, netCfg.InterfaceName)
+				if err != nil {
+					return kubeletplugin.PrepareResult{Err: err}
+				}
+				if !ifc.AllowUnsafe {
+					if err := d.validateHostDeviceSafety(ctx, link, deviceCfg.HostDevice); err != nil {
+						return kubeletplugin.PrepareResult{Err: err}
+					}
+				}
+			}
+		}
+		deviceCfg.LifecycleState = "Prepared"
 		if err := d.store.SetDevice(types.UID(reserved.UID), allocation.Device, deviceCfg); err != nil {
 			return kubeletplugin.PrepareResult{Err: fmt.Errorf("persist pod config: %w", err)}
 		}
@@ -411,6 +476,10 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletplugin.NamespacedObject) (map[types.UID]error, error) {
 	result := map[types.UID]error{}
 	for _, claim := range claims {
+		if err := d.restoreClaimHostDevices(ctx, claim.UID); err != nil {
+			result[claim.UID] = fmt.Errorf("restore host device before unprepare: %w", err)
+			continue
+		}
 		if err := d.removeResourceClaimDeviceStatus(ctx, types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name}); err != nil {
 			result[claim.UID] = fmt.Errorf("remove ResourceClaim device status: %w", err)
 			continue
@@ -424,12 +493,32 @@ func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletpl
 	return result, nil
 }
 
-func (d *Driver) Synchronize(_ context.Context, pods []*api.PodSandbox, _ []*api.Container) ([]*api.ContainerUpdate, error) {
+func (d *Driver) Synchronize(ctx context.Context, pods []*api.PodSandbox, _ []*api.Container) ([]*api.ContainerUpdate, error) {
+	active := map[types.UID]bool{}
 	for _, pod := range pods {
+		active[types.UID(pod.Uid)] = true
 		if ns := networkNamespace(pod); ns != "" {
 			_ = d.store.SetNetNS(types.UID(pod.Uid), ns)
 		}
 	}
+	for podUID, podCfg := range d.store.PodConfigs() {
+		if active[podUID] {
+			continue
+		}
+		for deviceName, cfg := range podCfg.Devices {
+			if cfg.Network.Type != "host-device" || cfg.HostDevice == nil || cfg.HostDevice.Restored {
+				continue
+			}
+			if err := restoreHostDevice("", &cfg); err != nil {
+				klog.ErrorS(err, "Could not recover orphaned host device", "interface", cfg.ParentName, "podUID", podUID)
+				continue
+			}
+			if err := d.store.SetDevice(podUID, deviceName, cfg); err != nil {
+				return nil, err
+			}
+		}
+	}
+	_ = d.publish(ctx)
 	return nil, nil
 }
 
@@ -455,7 +544,14 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	}
 	for deviceName, cfg := range podCfg.Devices {
 		if cfg.AttachedIf == "" {
-			hardwareAddress, err := attachLink(nsPath, cfg)
+			hardwareAddress := ""
+			var err error
+			if cfg.Network.Type == "host-device" {
+				err = attachHostDevice(nsPath, &cfg)
+				hardwareAddress = cfg.HardwareAddress
+			} else {
+				hardwareAddress, err = attachLink(nsPath, cfg)
+			}
 			if err != nil {
 				message := fmt.Sprintf("failed to attach %s: %v", cfg.Network.InterfaceName, err)
 				_ = d.setResourceClaimDeviceStatus(ctx, cfg, false, "NetworkAttachFailed", message, "")
@@ -465,6 +561,7 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 			}
 			cfg.AttachedIf = cfg.Network.InterfaceName
 			cfg.HardwareAddress = hardwareAddress
+			cfg.LifecycleState = "Attached"
 			if err := d.store.SetDevice(podUID, deviceName, cfg); err != nil {
 				return err
 			}
@@ -488,9 +585,12 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 	return nil
 }
 
-func (d *Driver) StopPodSandbox(_ context.Context, pod *api.PodSandbox) error {
-	klog.InfoS("pod sandbox stopped", "namespace", pod.GetNamespace(), "name", pod.GetName(), "uid", pod.GetUid())
-	return nil
+func (d *Driver) StopPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
+	return d.restorePodHostDevices(ctx, pod)
+}
+
+func (d *Driver) RemovePodSandbox(ctx context.Context, pod *api.PodSandbox) error {
+	return d.restorePodHostDevices(ctx, pod)
 }
 
 func (d *Driver) configForRequest(claim *resourceapi.ResourceClaim, request string) (NetworkConfig, error) {
@@ -650,7 +750,7 @@ func hostChildName(cfg DeviceConfig) string {
 	return base
 }
 
-func deviceAttributes(ifc config.InterfaceConfig, link netlink.Link) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+func deviceAttributes(ifc config.InterfaceConfig, link netlink.Link, identity InterfaceIdentity) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	attrs := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{}
 	setString := func(name, value string) {
 		attrs[resourceapi.QualifiedName(name)] = resourceapi.DeviceAttribute{StringValue: &value}
@@ -668,9 +768,64 @@ func deviceAttributes(ifc config.InterfaceConfig, link netlink.Link) map[resourc
 	setString(AttrIPvlanModes, strings.Join(ifc.IPvlanModes, ","))
 	setBool(AttrMacvlan, slices.Contains(ifc.Types, "macvlan"))
 	setBool(AttrIPvlan, slices.Contains(ifc.Types, "ipvlan"))
+	setBool(AttrHostDevice, slices.Contains(ifc.Types, "host-device"))
 	setBool(AttrDefault, ifc.Default)
 	setInt(AttrMTU, int64(link.Attrs().MTU))
+	setString(AttrPolicy, ifc.AllocationPolicy)
+	setString(AttrAdminState, adminState(link))
+	setString(AttrOperState, strings.ToLower(link.Attrs().OperState.String()))
+	setIdentityAttributes(attrs, identity)
 	return attrs
+}
+
+func storedDeviceAttributes(ifc config.InterfaceConfig, cfg DeviceConfig) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	attrs := deviceAttributesFromValues(ifc, cfg.HostDevice.OriginalMAC, cfg.HostDevice.OriginalMTU, cfg.Identity)
+	value := "allocated"
+	attrs[resourceapi.QualifiedName(AttrOperState)] = resourceapi.DeviceAttribute{StringValue: &value}
+	return attrs
+}
+
+func deviceAttributesFromValues(ifc config.InterfaceConfig, mac string, mtu int, identity InterfaceIdentity) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
+	attrs := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{}
+	setStringAttribute(attrs, AttrInterface, ifc.Name)
+	setStringAttribute(attrs, AttrMAC, mac)
+	setStringAttribute(attrs, AttrTypes, strings.Join(ifc.Types, ","))
+	setStringAttribute(attrs, AttrMacvlanModes, strings.Join(ifc.MacvlanModes, ","))
+	setStringAttribute(attrs, AttrIPvlanModes, strings.Join(ifc.IPvlanModes, ","))
+	setStringAttribute(attrs, AttrPolicy, ifc.AllocationPolicy)
+	setBoolAttribute(attrs, AttrMacvlan, slices.Contains(ifc.Types, "macvlan"))
+	setBoolAttribute(attrs, AttrIPvlan, slices.Contains(ifc.Types, "ipvlan"))
+	setBoolAttribute(attrs, AttrHostDevice, slices.Contains(ifc.Types, "host-device"))
+	setBoolAttribute(attrs, AttrDefault, ifc.Default)
+	value := int64(mtu)
+	attrs[resourceapi.QualifiedName(AttrMTU)] = resourceapi.DeviceAttribute{IntValue: &value}
+	setIdentityAttributes(attrs, identity)
+	return attrs
+}
+
+func setStringAttribute(attrs map[resourceapi.QualifiedName]resourceapi.DeviceAttribute, name, value string) {
+	if value != "" {
+		attrs[resourceapi.QualifiedName(name)] = resourceapi.DeviceAttribute{StringValue: &value}
+	}
+}
+
+func setBoolAttribute(attrs map[resourceapi.QualifiedName]resourceapi.DeviceAttribute, name string, value bool) {
+	attrs[resourceapi.QualifiedName(name)] = resourceapi.DeviceAttribute{BoolValue: &value}
+}
+
+func setIdentityAttributes(attrs map[resourceapi.QualifiedName]resourceapi.DeviceAttribute, identity InterfaceIdentity) {
+	setStringAttribute(attrs, AttrKernelDriver, identity.KernelDriver)
+	setStringAttribute(attrs, AttrBusType, identity.BusType)
+	setStringAttribute(attrs, AttrPCIAddress, identity.PCIAddress)
+	setStringAttribute(attrs, AttrPCIVendorID, identity.PCIVendorID)
+	setStringAttribute(attrs, AttrPCIDeviceID, identity.PCIDeviceID)
+}
+
+func adminState(link netlink.Link) string {
+	if link.Attrs().Flags&net.FlagUp != 0 {
+		return "up"
+	}
+	return "down"
 }
 
 func mergeConfig(dst *NetworkConfig, src NetworkConfig) {
@@ -715,6 +870,13 @@ func validateConfig(ifc config.InterfaceConfig, cfg NetworkConfig) error {
 	case "ipvlan":
 		if !slices.Contains(ifc.IPvlanModes, cfg.Mode) {
 			return fmt.Errorf("interface %s does not allow ipvlan mode %q", ifc.Name, cfg.Mode)
+		}
+	case "host-device":
+		if ifc.AllocationPolicy != "exclusive" {
+			return fmt.Errorf("interface %s host-device requires exclusive allocation policy", ifc.Name)
+		}
+		if cfg.Mode != "" {
+			return fmt.Errorf("host-device does not support mode %q", cfg.Mode)
 		}
 	}
 	return nil

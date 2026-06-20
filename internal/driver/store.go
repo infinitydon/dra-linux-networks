@@ -93,6 +93,16 @@ func (s *Store) GetPod(podUID types.UID) (PodConfig, bool) {
 	return pod, ok
 }
 
+func (s *Store) PodConfigs() map[types.UID]PodConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result := make(map[types.UID]PodConfig, len(s.Pods))
+	for uid, pod := range s.Pods {
+		result[uid] = pod
+	}
+	return result
+}
+
 func (s *Store) DeletePod(podUID types.UID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -1,14 +1,17 @@
-{{- if .Values.deviceClass.create }}
+{{- range .Values.deviceClasses }}
+{{- if .create }}
+---
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass
 metadata:
-  name: {{ .Values.deviceClass.name }}
+  name: {{ .name }}
   labels:
-    {{- include "linux-net-dra.labels" . | nindent 4 }}
+    {{- include "linux-net-dra.labels" $ | nindent 4 }}
 spec:
   selectors:
     - cel:
         expression: >-
-          device.driver == {{ .Values.driverName | squote }} &&
-          device.attributes[{{ .Values.driverName | squote }}].{{ .Values.deviceClass.type }} == true
+          device.driver == {{ $.Values.driverName | squote }} &&
+          device.attributes[{{ $.Values.driverName | squote }}].{{ .attribute }} == true
+{{- end }}
 {{- end }}

@@ -20,12 +20,15 @@ func TestResourceClaimDeviceStatusIncludesNetworkData(t *testing.T) {
 	client := kubernetesfake.NewSimpleClientset(claim)
 	driver := &Driver{driverName: "linux-net.dra.infinitydon.com", client: client}
 	cfg := DeviceConfig{
-		Claim:      types.NamespacedName{Namespace: "default", Name: "claim-a"},
-		ClaimUID:   claim.UID,
-		DriverName: driver.driverName,
-		PoolName:   "worker-a",
-		DeviceName: "enp8s20",
-		ParentName: "enp8s20",
+		Claim:            types.NamespacedName{Namespace: "default", Name: "claim-a"},
+		ClaimUID:         claim.UID,
+		DriverName:       driver.driverName,
+		PoolName:         "worker-a",
+		DeviceName:       "enp8s20",
+		ParentName:       "enp8s20",
+		AllocationPolicy: "shared",
+		Identity:         InterfaceIdentity{KernelDriver: "virtio_net", BusType: "virtio"},
+		LifecycleState:   "Attached",
 		Network: NetworkConfig{
 			Type: "macvlan", Mode: "bridge", InterfaceName: "net1", IPPool: "lan-88",
 			Addresses: []string{"192.168.88.10/24"},
@@ -47,6 +50,9 @@ func TestResourceClaimDeviceStatusIncludesNetworkData(t *testing.T) {
 	}
 	if len(status.Conditions) != 1 || status.Conditions[0].Status != metav1.ConditionTrue || status.Conditions[0].Reason != "NetworkAttached" {
 		t.Fatalf("unexpected conditions: %+v", status.Conditions)
+	}
+	if string(status.Data.Raw) == "" || !strings.Contains(string(status.Data.Raw), `"kernelDriver":"virtio_net"`) || !strings.Contains(string(status.Data.Raw), `"allocationPolicy":"shared"`) {
+		t.Fatalf("device identity missing from status data: %s", status.Data.Raw)
 	}
 }
 

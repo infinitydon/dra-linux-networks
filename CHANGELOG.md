@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.0
+
+- Discover and publish NIC kernel driver, bus, PCI identity, and link state.
+- Add CEL-selectable macvlan, ipvlan, and host-device DeviceClasses.
+- Add exclusive host-device NIC pools with persistent attachment state.
+- Restore host-device name, MAC, MTU, addresses, and administrative state.
+- Add StopPodSandbox, RemovePodSandbox, unprepare, and restart recovery paths.
+- Report hardware identity, allocation policy, and lifecycle in claim and Pod status.
+- Reject unsafe host-device assignment of node-address, default-route, or mastered NICs.
+- Add a two-NIC host-device Deployment example and lifecycle e2e test.
+
 ## v0.1.12
 
 - Pin netshoot test workloads to the immutable `v0.15` image digest.

@@ -33,6 +33,9 @@ const (
 
 func TestMultiNodeIPAMConnectivity(t *testing.T) {
 	if *staticNode == "" || *dynamicNode == "" {
+		if *staticNode == "" && *dynamicNode == "" {
+			t.Skip("-static-node and -dynamic-node are not set")
+		}
 		t.Fatal("-static-node and -dynamic-node are required")
 	}
 	if *staticNode == *dynamicNode {

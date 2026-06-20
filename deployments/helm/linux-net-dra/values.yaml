@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.1.12"
+  tag: "0.2.0"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -40,6 +40,7 @@ state:
 interfaces:
   - name: enp8s20
     default: true
+    allocationPolicy: shared
     types:
       - macvlan
       - ipvlan
@@ -57,8 +58,36 @@ interfaces:
     defaultPodInterfaceName: net1
     mtu: 9000
 
-deviceClass:
-  create: true
-  name: linux-net-macvlan
-  type: macvlan
-  interfaceName: enp8s20
+  - name: enp8s21
+    default: false
+    allocationPolicy: exclusive
+    types:
+      - host-device
+    defaultType: host-device
+    defaultPodInterfaceName: enp8s21
+    mtu: 1500
+    allowUnsafe: false
+
+  - name: enp8s22
+    default: false
+    allocationPolicy: exclusive
+    types:
+      - host-device
+    defaultType: host-device
+    defaultPodInterfaceName: enp8s22
+    mtu: 1500
+    allowUnsafe: false
+
+deviceClasses:
+  - create: true
+    name: linux-net-macvlan
+    type: macvlan
+    attribute: macvlan
+  - create: true
+    name: linux-net-ipvlan
+    type: ipvlan
+    attribute: ipvlan
+  - create: true
+    name: linux-net-host-device
+    type: host-device
+    attribute: hostDevice

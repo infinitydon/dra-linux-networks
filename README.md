@@ -10,6 +10,7 @@ The driver uses:
 - The kubelet DRA plugin API for claim preparation.
 - containerd NRI for pod sandbox network namespace attachment.
 - Linux netlink for `macvlan` and `ipvlan` creation.
+- Exclusive whole-NIC assignment with host-device lifecycle restoration.
 - Cluster-scoped `IPAllocation` objects for multi-node IP uniqueness.
 - A controller Deployment for stale-allocation cleanup and pool status.
 
@@ -62,6 +63,7 @@ By default the chart advertises `enp8s20`:
 interfaces:
   - name: enp8s20
     default: true
+    allocationPolicy: shared
     types:
       - macvlan
       - ipvlan
@@ -69,7 +71,18 @@ interfaces:
     defaultMode: bridge
     defaultPodInterfaceName: net1
     mtu: 9000
+
+  - name: enp8s21
+    allocationPolicy: exclusive
+    types: [host-device]
+    defaultType: host-device
+    defaultPodInterfaceName: enp8s21
 ```
+
+Each NIC is either `shared` for macvlan/ipvlan parents or `exclusive` for
+host-device assignment. The two policies cannot be mixed on one physical NIC.
+The driver publishes kernel driver, bus type, PCI address/vendor/device IDs,
+MAC, MTU, and link state as ResourceSlice attributes for CEL selection.
 
 The chart installs the `IPPool` CRD but does not create any pool instances.
 The example pool is operator-owned and contains:
@@ -157,6 +170,19 @@ kubectl get lnipa
 
 Test workloads pin netshoot to the immutable `v0.15` image digest so repeated
 runs use the same userspace tooling.
+
+Assign one whole NIC per Pod from an exclusive pool:
+
+```bash
+kubectl apply -f examples/deployment-host-device-pool.yaml
+kubectl get pods -l app=linux-net-host-device-pool -o wide
+```
+
+The example selects `e1000` devices without naming a particular interface.
+DRA allocates different available NICs to each Pod. During deletion, the driver
+returns each NIC to the host and restores its original name, MAC, MTU, addresses,
+and administrative state. Interfaces carrying a node IP, default route, or link
+master are rejected unless the operator explicitly sets `allowUnsafe: true`.
 
 ## Claim Parameters
 
