@@ -48,7 +48,8 @@ kubectl label node ebpf-bng-node-01 linux-net.dra.infinitydon.com/enabled=true
 
 Create an operator-owned values file that lists only the interfaces which may
 be advertised on labeled nodes. A starting example is provided at
-`examples/values-netdevices.yaml`.
+`examples/values-netdevices.yaml`; the same complete inventory shape is
+documented inline in the chart's `values.yaml`.
 
 Install the chart with that inventory:
 

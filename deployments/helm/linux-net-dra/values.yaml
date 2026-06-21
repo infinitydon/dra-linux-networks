@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.3.5"
+  tag: "0.3.6"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -37,6 +37,8 @@ state:
   hostPath: /var/run/linux-net-dra
   file: /var/run/linux-net-dra/state.json
 
+# DPDK devices are discovered from PCI/sysfs independently of interfaces.
+# Enable this only on labeled nodes prepared with a supported userspace driver.
 dpdk:
   enabled: false
   allowUnsafeNoIOMMU: false
@@ -60,9 +62,44 @@ dpdk:
     pciAddresses: []
   compatibleDriverOverrides: {}
 
-# Node-local interfaces are operator inventory and must be supplied in a
-# separate values file. The chart never advertises a host interface by default.
+# Node-local interfaces are operator inventory. Replace this empty list in an
+# environment-specific values file. The chart never advertises a host interface
+# by default.
 interfaces: []
+
+# Example inventory:
+# interfaces:
+#   # Shared parent: multiple Pods may create macvlan or ipvlan children.
+#   - name: eth1
+#     default: true
+#     allocationPolicy: shared
+#     types:
+#       - macvlan
+#       - ipvlan
+#     macvlanModes:
+#       - bridge
+#       - private
+#       - vepa
+#       - passthru
+#     ipvlanModes:
+#       - l2
+#       - l3
+#       - l3s
+#     defaultType: macvlan
+#     defaultMode: bridge
+#     defaultPodInterfaceName: net1
+#     mtu: 1500
+#
+#   # Exclusive pool member: the complete NIC is moved into one Pod at a time.
+#   - name: eth2
+#     default: false
+#     allocationPolicy: exclusive
+#     types:
+#       - host-device
+#     defaultType: host-device
+#     defaultPodInterfaceName: eth2
+#     mtu: 1500
+#     allowUnsafe: false
 
 deviceClasses:
   - create: true

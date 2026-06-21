@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.6
+
+- Restore the complete shared macvlan/ipvlan and exclusive host-device inventory shape as commented Helm values.
+- Clarify that DPDK PCI discovery is independent of the node-local interface inventory.
+- Preserve an empty interface list as the safe public chart default.
+
 ## v0.3.5
 
 - Use the Kubernetes 1.36+ DRA-backed extended-resource API for simple DPDK device counts.

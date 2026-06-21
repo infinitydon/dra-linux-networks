@@ -1,4 +1,4 @@
-IMAGE ?= ghcr.io/infinitydon/dra-linux-networks:0.3.5
+IMAGE ?= ghcr.io/infinitydon/dra-linux-networks:0.3.6
 HOST_DEVICE_NODE ?= ebpf-bng-node-02
 STATIC_ADDRESS ?= 192.168.88.10/24
 GATEWAY ?= 192.168.88.1
