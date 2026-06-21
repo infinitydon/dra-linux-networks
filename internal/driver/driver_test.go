@@ -1,9 +1,42 @@
 package driver
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"k8s.io/dynamic-resource-allocation/resourceslice"
+	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
+
+	"github.com/infinitydon/dra-linux-networks/internal/config"
 )
+
+type capturingHelper struct {
+	resources resourceslice.DriverResources
+}
+
+func (h *capturingHelper) PublishResources(_ context.Context, resources resourceslice.DriverResources) error {
+	h.resources = resources
+	return nil
+}
+
+func (*capturingHelper) RegistrationStatus() *registerapi.RegistrationStatus { return nil }
+func (*capturingHelper) Stop()                                               {}
+
+func TestPublishEmptyInventoryWithdrawsNodePool(t *testing.T) {
+	helper := &capturingHelper{}
+	driver := &Driver{
+		nodeName: "worker-a",
+		cfg:      &config.Config{},
+		helper:   helper,
+	}
+	if err := driver.publish(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(helper.resources.Pools) != 0 {
+		t.Fatalf("published pools = %+v, want none", helper.resources.Pools)
+	}
+}
 
 func TestPodStaticAddressRequiresMatchingPoolReference(t *testing.T) {
 	base := AttrPrefix + "/net1"

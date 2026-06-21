@@ -214,11 +214,11 @@ func (d *Driver) publish(ctx context.Context) error {
 			})
 		}
 	}
-	resources := resourceslice.DriverResources{
-		Pools: map[string]resourceslice.Pool{
-			d.nodeName: {Slices: []resourceslice.Slice{{Devices: devices}}},
-		},
+	pools := map[string]resourceslice.Pool{}
+	if len(devices) > 0 {
+		pools[d.nodeName] = resourceslice.Pool{Slices: []resourceslice.Slice{{Devices: devices}}}
 	}
+	resources := resourceslice.DriverResources{Pools: pools}
 	return d.helper.PublishResources(ctx, resources)
 }
 

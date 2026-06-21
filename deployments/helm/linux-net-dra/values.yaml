@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.3.1"
+  tag: "0.3.2"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -38,7 +38,7 @@ state:
   file: /var/run/linux-net-dra/state.json
 
 dpdk:
-  enabled: true
+  enabled: false
   allowUnsafeNoIOMMU: false
   sysfsPath: /host/sys
   devPath: /host/dev
@@ -60,46 +60,9 @@ dpdk:
     pciAddresses: []
   compatibleDriverOverrides: {}
 
-interfaces:
-  - name: enp8s20
-    default: true
-    allocationPolicy: shared
-    types:
-      - macvlan
-      - ipvlan
-    macvlanModes:
-      - bridge
-      - private
-      - vepa
-      - passthru
-    ipvlanModes:
-      - l2
-      - l3
-      - l3s
-    defaultType: macvlan
-    defaultMode: bridge
-    defaultPodInterfaceName: net1
-    mtu: 9000
-
-  - name: enp8s21
-    default: false
-    allocationPolicy: exclusive
-    types:
-      - host-device
-    defaultType: host-device
-    defaultPodInterfaceName: enp8s21
-    mtu: 1500
-    allowUnsafe: false
-
-  - name: enp8s22
-    default: false
-    allocationPolicy: exclusive
-    types:
-      - host-device
-    defaultType: host-device
-    defaultPodInterfaceName: enp8s22
-    mtu: 1500
-    allowUnsafe: false
+# Node-local interfaces are operator inventory and must be supplied in a
+# separate values file. The chart never advertises a host interface by default.
+interfaces: []
 
 deviceClasses:
   - create: true

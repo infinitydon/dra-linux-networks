@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.2
+
+- Remove lab-specific interface names from the public Helm defaults.
+- Disable DPDK discovery by default and allow an empty device inventory.
+- Require operators to supply node-local NIC inventory in a separate values file.
+- Add a generic operator values example for shared and exclusive netdevices.
+
 ## v0.3.1
 
 - Remove the custom `NetworkReady` readiness gate from standard examples and e2e workloads.

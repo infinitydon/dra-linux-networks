@@ -88,9 +88,6 @@ func Load(path string) (*Config, error) {
 	if cfg.DriverName == "" {
 		cfg.DriverName = DefaultDriverName
 	}
-	if len(cfg.Interfaces) == 0 && !cfg.DPDK.Enabled {
-		return nil, fmt.Errorf("at least one interface must be configured")
-	}
 	if cfg.DPDK.Enabled {
 		setDPDKDefaults(&cfg.DPDK)
 	}

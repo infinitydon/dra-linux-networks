@@ -42,3 +42,17 @@ func TestInterfaceAllocationPolicyValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestEmptyDeviceInventoryIsValid(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("load empty inventory: %v", err)
+	}
+	if len(cfg.Interfaces) != 0 || cfg.DPDK.Enabled {
+		t.Fatalf("unexpected inventory: %+v", cfg)
+	}
+}

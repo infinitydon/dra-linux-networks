@@ -30,7 +30,7 @@ The target lab cluster was checked before implementation:
 - Runtime: MicroK8s containerd `v2.2.3`
 - NRI: enabled with socket `/var/run/nri/nri.sock`
 - Worker node for this driver: `ebpf-bng-node-01`
-- Default parent interface: `enp8s20`
+- Lab test parent interface: `enp8s20`
 
 The control-plane node is intentionally excluded by using a node label selector.
 
@@ -46,11 +46,16 @@ Label the worker node that should advertise Linux network DRA resources:
 kubectl label node ebpf-bng-node-01 linux-net.dra.infinitydon.com/enabled=true
 ```
 
-Install the chart:
+Create an operator-owned values file that lists only the interfaces which may
+be advertised on labeled nodes. A starting example is provided at
+`examples/values-netdevices.yaml`.
+
+Install the chart with that inventory:
 
 ```bash
 helm upgrade --install linux-net-dra ./deployments/helm/linux-net-dra \
-  --namespace kube-system
+  --namespace kube-system \
+  --values my-linux-net-values.yaml
 ```
 
 Create environment-specific pools separately from the chart release:
@@ -59,28 +64,15 @@ Create environment-specific pools separately from the chart release:
 kubectl apply -f examples/ippool-lan-88.yaml
 ```
 
-By default the chart advertises `enp8s20`:
+The chart defaults to an empty inventory and advertises no host interfaces:
 
 ```yaml
-interfaces:
-  - name: enp8s20
-    default: true
-    allocationPolicy: shared
-    types:
-      - macvlan
-      - ipvlan
-    defaultType: macvlan
-    defaultMode: bridge
-    defaultPodInterfaceName: net1
-    mtu: 9000
-
-  - name: enp8s21
-    allocationPolicy: exclusive
-    types: [host-device]
-    defaultType: host-device
-    defaultPodInterfaceName: enp8s21
+interfaces: []
+dpdk:
+  enabled: false
 ```
 
+Interface names are node-local operator inventory, not portable chart defaults.
 Each NIC is either `shared` for macvlan/ipvlan parents or `exclusive` for
 host-device assignment. The two policies cannot be mixed on one physical NIC.
 The driver publishes kernel driver, bus type, PCI address/vendor/device IDs,
