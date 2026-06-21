@@ -12,7 +12,7 @@ import (
 
 var (
 	dpdkNode  = flag.String("dpdk-node", "", "node with DPDK devices and hugepages")
-	dpdkImage = flag.String("dpdk-image", "ghcr.io/infinitydon/dra-linux-networks-dpdk-testpmd:0.3.0@sha256:c770f82afe6ead4f9fc9e41cf3495b07f5d417a3190bfa2865a6559fce9c40a7", "pinned DPDK testpmd image")
+	dpdkImage = flag.String("dpdk-image", "ghcr.io/infinitydon/dra-linux-networks-dpdk-testpmd:0.3.0@sha256:5c90373e2ef12cfaa0c2fafaa09d75df25d7d3e6ad2eea6aaf7ba5fe61b86896", "pinned DPDK testpmd image")
 )
 
 const (

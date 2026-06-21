@@ -13,7 +13,7 @@ echo "Using Kubernetes CPU set ${DPDK_LCORES}"
 tail -f /dev/null | exec dpdk-testpmd \
   -l "${DPDK_LCORES}" \
   -n "${DPDK_MEMORY_CHANNELS:-2}" \
-  --iova-mode=va \
+  --iova-mode="${DPDK_IOVA_MODE:-pa}" \
   -a "${LINUX_NET_DRA_PCI_ADDRESS}" \
   -- \
   --forward-mode=io \
