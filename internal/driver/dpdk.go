@@ -250,6 +250,9 @@ func uniqueSorted(values []string, excluded string) []string {
 func dpdkDeviceAttributes(device dpdkDevice) map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	attrs := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{}
 	setBoolAttribute(attrs, AttrDPDK, true)
+	setBoolAttribute(attrs, AttrMacvlan, false)
+	setBoolAttribute(attrs, AttrIPvlan, false)
+	setBoolAttribute(attrs, AttrHostDevice, false)
 	setStringAttribute(attrs, AttrTypes, "dpdk")
 	setStringAttribute(attrs, AttrPolicy, "exclusive")
 	setStringAttribute(attrs, AttrBusType, "pci")

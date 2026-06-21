@@ -9,6 +9,11 @@ spec:
         - name: dpdk
           exactly:
             deviceClassName: linux-net-dpdk
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
+                    device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
       config:
         - requests: ["dpdk"]
           opaque:

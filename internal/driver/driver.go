@@ -824,6 +824,7 @@ func deviceAttributes(ifc config.InterfaceConfig, link netlink.Link, identity In
 	setBool(AttrMacvlan, slices.Contains(ifc.Types, "macvlan"))
 	setBool(AttrIPvlan, slices.Contains(ifc.Types, "ipvlan"))
 	setBool(AttrHostDevice, slices.Contains(ifc.Types, "host-device"))
+	setBool(AttrDPDK, false)
 	setBool(AttrDefault, ifc.Default)
 	setInt(AttrMTU, int64(link.Attrs().MTU))
 	setString(AttrPolicy, ifc.AllocationPolicy)
@@ -851,6 +852,7 @@ func deviceAttributesFromValues(ifc config.InterfaceConfig, mac string, mtu int,
 	setBoolAttribute(attrs, AttrMacvlan, slices.Contains(ifc.Types, "macvlan"))
 	setBoolAttribute(attrs, AttrIPvlan, slices.Contains(ifc.Types, "ipvlan"))
 	setBoolAttribute(attrs, AttrHostDevice, slices.Contains(ifc.Types, "host-device"))
+	setBoolAttribute(attrs, AttrDPDK, false)
 	setBoolAttribute(attrs, AttrDefault, ifc.Default)
 	value := int64(mtu)
 	attrs[resourceapi.QualifiedName(AttrMTU)] = resourceapi.DeviceAttribute{IntValue: &value}

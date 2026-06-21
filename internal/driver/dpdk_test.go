@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	resourceapi "k8s.io/api/resource/v1"
+
 	"github.com/infinitydon/dra-linux-networks/internal/config"
 )
 
@@ -31,6 +33,16 @@ func TestValidateDPDKConfigRejectsIPAM(t *testing.T) {
 	}
 	if err := validateDPDKConfig(NetworkConfig{Type: "dpdk"}); err != nil {
 		t.Fatalf("minimal DPDK config: %v", err)
+	}
+}
+
+func TestDPDKAttributesDefineEveryDeviceClassCapability(t *testing.T) {
+	attrs := dpdkDeviceAttributes(dpdkDevice{State: DPDKDeviceState{PCIAddress: "0000:01:00.0"}})
+	for _, name := range []string{AttrDPDK, AttrMacvlan, AttrIPvlan, AttrHostDevice} {
+		attribute, ok := attrs[resourceapi.QualifiedName(name)]
+		if !ok || attribute.BoolValue == nil {
+			t.Fatalf("capability %s is not defined", name)
+		}
 	}
 }
 
