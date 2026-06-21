@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.3.7"
+  tag: "0.3.8"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -70,7 +70,7 @@ interfaces: []
 # Example inventory:
 # interfaces:
 #   # Shared parent: multiple Pods may create macvlan or ipvlan children.
-#   - name: eth1
+#   - name: enp8s20
 #     default: true
 #     allocationPolicy: shared
 #     types:
@@ -90,35 +90,24 @@ interfaces: []
 #     defaultPodInterfaceName: net1
 #     mtu: 1500
 #
-#   # Second shared parent, selectable independently through a claim selector.
-#   - name: eth2
-#     default: false
-#     allocationPolicy: shared
-#     types:
-#       - macvlan
-#       - ipvlan
-#     macvlanModes:
-#       - bridge
-#       - private
-#       - vepa
-#       - passthru
-#     ipvlanModes:
-#       - l2
-#       - l3
-#       - l3s
-#     defaultType: macvlan
-#     defaultMode: bridge
-#     defaultPodInterfaceName: net1
-#     mtu: 1500
-#
 #   # Exclusive pool member: the complete NIC is moved into one Pod at a time.
-#   - name: eth3
+#   - name: enp8s21
 #     default: false
 #     allocationPolicy: exclusive
 #     types:
 #       - host-device
 #     defaultType: host-device
-#     defaultPodInterfaceName: eth3
+#     defaultPodInterfaceName: enp8s21
+#     mtu: 1500
+#     allowUnsafe: false
+#
+#   - name: enp8s22
+#     default: false
+#     allocationPolicy: exclusive
+#     types:
+#       - host-device
+#     defaultType: host-device
+#     defaultPodInterfaceName: enp8s22
 #     mtu: 1500
 #     allowUnsafe: false
 

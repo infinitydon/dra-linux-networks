@@ -1,7 +1,7 @@
 apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
-  name: linux-net-macvlan-eth2
+  name: linux-net-macvlan-enp8s20
 spec:
   spec:
     devices:
@@ -12,7 +12,7 @@ spec:
             selectors:
               - cel:
                   expression: >-
-                    device.attributes['linux-net.dra.infinitydon.com'].interface == 'eth2'
+                    device.attributes['linux-net.dra.infinitydon.com'].interface == 'enp8s20'
       config:
         - requests: ["net1"]
           opaque:
@@ -27,12 +27,12 @@ spec:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: linux-net-macvlan-eth2-test
+  name: linux-net-macvlan-enp8s20-test
 spec:
   restartPolicy: Never
   resourceClaims:
     - name: net1
-      resourceClaimTemplateName: linux-net-macvlan-eth2
+      resourceClaimTemplateName: linux-net-macvlan-enp8s20
   containers:
     - name: shell
       image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61

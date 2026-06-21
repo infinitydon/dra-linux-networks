@@ -1,0 +1,63 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: linux-net-macvlan-dpdk
+spec:
+  spec:
+    devices:
+      requests:
+        - name: net1
+          exactly:
+            deviceClassName: linux-net-macvlan
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes['linux-net.dra.infinitydon.com'].interface == 'enp8s20'
+        - name: dpdk
+          exactly:
+            deviceClassName: linux-net-dpdk
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
+                    device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
+      config:
+        - requests: ["net1"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: macvlan
+              mode: bridge
+              interfaceName: net1
+              mtu: 9000
+              ipPool: lan-88
+        - requests: ["dpdk"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: dpdk
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-macvlan-dpdk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: linux-net-macvlan-dpdk
+  template:
+    metadata:
+      labels:
+        app: linux-net-macvlan-dpdk
+    spec:
+      resourceClaims:
+        - name: network-devices
+          resourceClaimTemplateName: linux-net-macvlan-dpdk
+      containers:
+        - name: shell
+          image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61
+          command: ["sleep", "3600"]
+          resources:
+            claims:
+              - name: network-devices

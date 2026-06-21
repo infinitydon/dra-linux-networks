@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.8
+
+- Align public inventory examples with the test cluster's `enp8s20`, `enp8s21`, and `enp8s22` interfaces.
+- Add a Deployment whose single generated claim requests both macvlan and DPDK devices.
+- Pin the macvlan request to `enp8s20` and the DPDK request to an Intel `8086:154c` VF.
+
 ## v0.3.7
 
 - Show two independently selectable shared macvlan/ipvlan parents in the Helm inventory example.

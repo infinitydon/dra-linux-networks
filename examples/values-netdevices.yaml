@@ -1,6 +1,6 @@
-# Replace interface names and policies with inventory appropriate for your nodes.
+# Inventory used by the example cluster. Replace it for other environments.
 interfaces:
-  - name: eth1
+  - name: enp8s20
     default: true
     allocationPolicy: shared
     types:
@@ -13,26 +13,23 @@ interfaces:
     defaultPodInterfaceName: net1
     mtu: 1500
 
-  - name: eth2
-    default: false
-    allocationPolicy: shared
-    types:
-      - macvlan
-      - ipvlan
-    macvlanModes: [bridge, private, vepa, passthru]
-    ipvlanModes: [l2, l3, l3s]
-    defaultType: macvlan
-    defaultMode: bridge
-    defaultPodInterfaceName: net1
-    mtu: 1500
-
-  - name: eth3
+  - name: enp8s21
     default: false
     allocationPolicy: exclusive
     types:
       - host-device
     defaultType: host-device
-    defaultPodInterfaceName: eth3
+    defaultPodInterfaceName: enp8s21
+    mtu: 1500
+    allowUnsafe: false
+
+  - name: enp8s22
+    default: false
+    allocationPolicy: exclusive
+    types:
+      - host-device
+    defaultType: host-device
+    defaultPodInterfaceName: enp8s22
     mtu: 1500
     allowUnsafe: false
 
