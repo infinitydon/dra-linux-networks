@@ -180,7 +180,7 @@ func setDPDKDefaults(cfg *DPDKConfig) {
 	if len(cfg.Drivers) == 0 {
 		cfg.Drivers = []string{"vfio-pci"}
 	}
-	if len(cfg.PCIClasses) == 0 {
+	if cfg.PCIClasses == nil {
 		cfg.PCIClasses = []string{"0200"}
 	}
 	for i := range cfg.Drivers {

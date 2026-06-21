@@ -26,6 +26,15 @@ func TestDPDKSelectorUsesANDWithinSelector(t *testing.T) {
 	}
 }
 
+func TestEmptyPCIClassFilterAllowsAnyClass(t *testing.T) {
+	if !classAllowed("120000", []string{}) {
+		t.Fatal("explicit empty PCI class filter rejected an accelerator class")
+	}
+	if classAllowed("120000", []string{"0200"}) {
+		t.Fatal("ethernet class filter accepted an accelerator class")
+	}
+}
+
 func TestValidateDPDKConfigRejectsIPAM(t *testing.T) {
 	err := validateDPDKConfig(NetworkConfig{Type: "dpdk", IPPool: "lan-88"})
 	if err == nil || !strings.Contains(err.Error(), "do not support") {

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.3
+
+- Treat omitted `pciClasses` as the safe Ethernet `0200` default.
+- Treat explicit `pciClasses: []` as no PCI class filter.
+- Add a digest-pinned two-replica Ligato VPP 25.10 DPDK example.
+- Add an e2e test proving exclusive PCI and VFIO-group injection into both VPP instances.
+
 ## v0.3.2
 
 - Remove lab-specific interface names from the public Helm defaults.

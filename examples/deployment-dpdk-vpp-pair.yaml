@@ -1,0 +1,95 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: linux-net-dpdk-vpp
+spec:
+  spec:
+    devices:
+      requests:
+        - name: dpdk
+          exactly:
+            deviceClassName: linux-net-dpdk
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
+                    device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
+      config:
+        - requests: ["dpdk"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: dpdk
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-dpdk-vpp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: linux-net-dpdk-vpp
+  template:
+    metadata:
+      labels:
+        app: linux-net-dpdk-vpp
+    spec:
+      resourceClaims:
+        - name: dpdk
+          resourceClaimTemplateName: linux-net-dpdk-vpp
+      containers:
+        - name: vpp
+          image: ligato/vpp-base:25.10-release@sha256:07014580a680b41f1fe21b7497a01ff28bbceb6d23eecfe0dc3174e23eb69541
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              cat >/tmp/vpp-startup.conf <<EOF
+              unix {
+                nodaemon
+                nobanner
+                cli-listen /run/vpp/cli.sock
+              }
+              api-segment { gid 0 }
+              cpu {
+                relative
+                main-core 0
+                workers 1
+              }
+              dpdk {
+                dev ${LINUX_NET_DRA_PCI_ADDRESS}
+                uio-driver vfio-pci
+                no-multi-seg
+              }
+              EOF
+              exec vpp -c /tmp/vpp-startup.conf
+          securityContext:
+            capabilities:
+              add: ["IPC_LOCK", "SYS_ADMIN", "SYS_RAWIO"]
+          readinessProbe:
+            exec:
+              command: ["vppctl", "-s", "/run/vpp/cli.sock", "show", "version"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: "2"
+              memory: 512Mi
+              hugepages-1Gi: 2Gi
+            limits:
+              cpu: "2"
+              memory: 512Mi
+              hugepages-1Gi: 2Gi
+            claims:
+              - name: dpdk
+          volumeMounts:
+            - name: hugepages
+              mountPath: /dev/hugepages
+            - name: run
+              mountPath: /run/vpp
+      volumes:
+        - name: hugepages
+          emptyDir:
+            medium: HugePages
+        - name: run
+          emptyDir: {}

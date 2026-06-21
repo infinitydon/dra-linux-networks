@@ -192,6 +192,9 @@ func selectorAllows(selector config.PCISelector, address, vendor, device string,
 }
 
 func classAllowed(class string, classes []string) bool {
+	if len(classes) == 0 {
+		return true
+	}
 	for _, allowed := range classes {
 		if strings.HasPrefix(class, allowed) {
 			return true

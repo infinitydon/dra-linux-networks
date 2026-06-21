@@ -56,3 +56,29 @@ func TestEmptyDeviceInventoryIsValid(t *testing.T) {
 		t.Fatalf("unexpected inventory: %+v", cfg)
 	}
 }
+
+func TestDPDKPCIClassDefaultDistinguishesOmittedAndEmpty(t *testing.T) {
+	tests := []struct {
+		name        string
+		dpdkJSON    string
+		wantClasses []string
+	}{
+		{name: "omitted defaults to ethernet", dpdkJSON: `{"enabled":true}`, wantClasses: []string{"0200"}},
+		{name: "explicit empty disables filtering", dpdkJSON: `{"enabled":true,"pciClasses":[]}`, wantClasses: []string{}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(`{"dpdk":`+test.dpdkJSON+`}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Join(cfg.DPDK.PCIClasses, ",") != strings.Join(test.wantClasses, ",") {
+				t.Fatalf("pciClasses = %v, want %v", cfg.DPDK.PCIClasses, test.wantClasses)
+			}
+		})
+	}
+}

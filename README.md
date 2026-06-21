@@ -199,6 +199,11 @@ dpdk:
     "8086:154c": [iavf]
 ```
 
+When `pciClasses` is omitted, the driver defaults to Ethernet class `0200` as a
+safety boundary. An explicit `pciClasses: []` disables PCI class filtering and
+allows any device class that also matches the configured userspace drivers and
+include/exclude selectors.
+
 The driver publishes each eligible PCI function as an exclusive DRA device and
 reports its BDF, numeric IDs, manufacturer/model, current and compatible kernel
 drivers, NUMA node, IOMMU group and IOMMU mode. PCI addresses are optional
@@ -226,6 +231,22 @@ Run the project-owned testpmd workload after enabling DPDK discovery:
 kubectl apply -f examples/deployment-dpdk-testpmd.yaml
 kubectl logs -l app=linux-net-dpdk-testpmd
 ```
+
+Run two independent VPP 25.10 instances, each with its own generated claim and
+exclusive Intel VF:
+
+```bash
+kubectl apply -f examples/deployment-dpdk-vpp-pair.yaml
+kubectl get pods -l app=linux-net-dpdk-vpp -o wide
+kubectl exec deploy/linux-net-dpdk-vpp -- \
+  vppctl -s /run/vpp/cli.sock show hardware-interfaces
+```
+
+The VPP example pins
+[`ligato/vpp-base:25.10-release`](https://hub.docker.com/r/ligato/vpp-base)
+by digest. Each replica requests two CPUs and two 1 GiB hugepages. The e2e test
+verifies distinct PCI addresses and IOMMU groups, CDI-only VFIO nodes, VPP
+version, and Intel iAVF hardware discovery in both Pods.
 
 The example requests two 1 GiB hugepages and uses the versioned
 `dra-linux-networks-dpdk-testpmd` image, built from DPDK v26.03. Hugepage provisioning, CPU isolation and
