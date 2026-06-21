@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.7
+
+- Show two independently selectable shared macvlan/ipvlan parents in the Helm inventory example.
+- Keep a third example interface exclusively allocated for host-device workloads.
+- Add a macvlan ResourceClaimTemplate example that selects a specific parent interface through CEL.
+- Correct the ipvlan example to use the ipvlan DeviceClass.
+
 ## v0.3.6
 
 - Restore the complete shared macvlan/ipvlan and exclusive host-device inventory shape as commented Helm values.

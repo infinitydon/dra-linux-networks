@@ -41,7 +41,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/infinitydon/dra-linux-networks:0.3.6
+            ghcr.io/infinitydon/dra-linux-networks:0.3.7
             ghcr.io/infinitydon/dra-linux-networks:latest
       - name: Detect DPDK test image changes
         id: dpdk-image

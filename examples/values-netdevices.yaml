@@ -15,11 +15,24 @@ interfaces:
 
   - name: eth2
     default: false
+    allocationPolicy: shared
+    types:
+      - macvlan
+      - ipvlan
+    macvlanModes: [bridge, private, vepa, passthru]
+    ipvlanModes: [l2, l3, l3s]
+    defaultType: macvlan
+    defaultMode: bridge
+    defaultPodInterfaceName: net1
+    mtu: 1500
+
+  - name: eth3
+    default: false
     allocationPolicy: exclusive
     types:
       - host-device
     defaultType: host-device
-    defaultPodInterfaceName: eth2
+    defaultPodInterfaceName: eth3
     mtu: 1500
     allowUnsafe: false
 

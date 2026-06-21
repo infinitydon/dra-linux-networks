@@ -79,6 +79,10 @@ host-device assignment. The two policies cannot be mixed on one physical NIC.
 The driver publishes kernel driver, bus type, PCI address/vendor/device IDs,
 MAC, MTU, and link state as ResourceSlice attributes for CEL selection.
 
+The inventory example defines two shared parents, `eth1` and `eth2`, and one
+exclusive host-device NIC, `eth3`. A workload can pin its macvlan parent with a
+CEL selector; see `examples/resourceclaimtemplate-macvlan-specific-parent.yaml`.
+
 The chart installs the `IPPool` CRD but does not create any pool instances.
 The example pool is operator-owned and contains:
 
