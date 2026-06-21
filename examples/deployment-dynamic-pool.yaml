@@ -34,8 +34,6 @@ spec:
       labels:
         app: linux-net-dynamic-deployment
     spec:
-      readinessGates:
-        - conditionType: linux-net.dra.infinitydon.com/NetworkReady
       resourceClaims:
         - name: net1
           resourceClaimTemplateName: linux-net-dynamic-deployment

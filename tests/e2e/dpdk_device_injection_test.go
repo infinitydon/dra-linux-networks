@@ -38,6 +38,14 @@ func TestDPDKDeviceInjectionWithTestPMD(t *testing.T) {
 	waitReady(t, dpdkPod)
 	assertPodNode(t, dpdkPod, *dpdkNode)
 
+	t.Run("PodUsesStandardKubernetesReadiness", func(t *testing.T) {
+		customStatus := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", dpdkPod,
+			"-o", `jsonpath={.status.conditions[?(@.type=="linux-net.dra.infinitydon.com/NetworkReady")].status}`))
+		if customStatus != "" {
+			t.Fatalf("unexpected custom NetworkReady condition %q", customStatus)
+		}
+	})
+
 	t.Run("VFIODeviceNodesAndMetadataAreInjected", func(t *testing.T) {
 		output := mustKubectl(t, "-n", *namespace, "exec", dpdkPod, "--", "sh", "-ec", `test -c /dev/vfio/vfio; test -c /dev/vfio/$LINUX_NET_DRA_IOMMU_GROUP; printf '%s %s' "$LINUX_NET_DRA_PCI_ADDRESS" "$LINUX_NET_DRA_IOMMU_GROUP"`)
 		fields := strings.Fields(output)
@@ -102,8 +110,6 @@ metadata:
 spec:
   nodeSelector:
     kubernetes.io/hostname: %[3]s
-  readinessGates:
-    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: dpdk
       resourceClaimTemplateName: %[1]s

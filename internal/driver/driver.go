@@ -498,7 +498,7 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			DeviceName: allocation.Device,
 		})
 	}
-	if len(prepared) > 0 {
+	if len(prepared) > 0 && podUsesNetworkReadinessGate(pod) {
 		if err := d.setPodNetworkCondition(ctx, pod.Namespace, pod.Name, pod.UID, corev1.ConditionFalse, "NetworkPrepared", "Secondary network resources are prepared; waiting for attachment"); err != nil {
 			return kubeletplugin.PrepareResult{Err: fmt.Errorf("set Pod network readiness: %w", err)}
 		}
@@ -608,7 +608,9 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 			if err != nil {
 				message := fmt.Sprintf("failed to attach %s: %v", cfg.Network.InterfaceName, err)
 				_ = d.setResourceClaimDeviceStatus(ctx, cfg, false, "NetworkAttachFailed", message, "")
-				_ = d.setPodNetworkCondition(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, corev1.ConditionFalse, "NetworkAttachFailed", message)
+				if podUsesNetworkReadinessGate(kubePod) {
+					_ = d.setPodNetworkCondition(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, corev1.ConditionFalse, "NetworkAttachFailed", message)
+				}
 				_ = d.emitPodEvent(ctx, kubePod, corev1.EventTypeWarning, "LinuxNetworkAttachFailed", "AttachNetwork", message, &cfg.Claim)
 				return fmt.Errorf("attach %s for pod %s/%s: %w", deviceName, pod.Namespace, pod.Name, err)
 			}
@@ -632,8 +634,10 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 			klog.ErrorS(err, "Could not emit Pod event", "pod", klog.KObj(kubePod))
 		}
 	}
-	if err := d.setPodNetworkCondition(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, corev1.ConditionTrue, "NetworkAttached", "All requested secondary networks are attached"); err != nil {
-		return fmt.Errorf("set Pod network readiness: %w", err)
+	if podUsesNetworkReadinessGate(kubePod) {
+		if err := d.setPodNetworkCondition(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, corev1.ConditionTrue, "NetworkAttached", "All requested secondary networks are attached"); err != nil {
+			return fmt.Errorf("set Pod network readiness: %w", err)
+		}
 	}
 	return nil
 }

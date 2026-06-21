@@ -307,19 +307,17 @@ The driver also emits `LinuxNetworkPrepared`, `LinuxNetworkAttached`, and
 `LinuxNetworkAttachFailed` Events against the Pod, so the lifecycle appears in
 `kubectl describe pod`.
 
-Pods may make the secondary network part of readiness by adding:
-
-```yaml
-spec:
-  readinessGates:
-    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
-```
-
-For opted-in Pods, the driver owns that condition and sets it to `True` only
-after NRI has attached all requested secondary interfaces. ResourceClaim status
-is the DRA-native source of truth, the Pod annotation is its durable Pod-level
+DRA preparation and CDI injection complete synchronously before workload
+containers are created. The NRI `RunPodSandbox` attachment hook is synchronous
+with sandbox creation. Therefore the examples use normal Kubernetes Pod
+readiness and do not require a custom readiness gate. ResourceClaim status is
+the DRA-native source of truth, the Pod annotation is its durable Pod-level
 summary, and Events are supplemental records that expire according to the
 cluster Event retention policy.
+
+The driver retains backward-compatible support for the optional
+`linux-net.dra.infinitydon.com/NetworkReady` gate, but it is only appropriate
+when an operator deliberately wants that additional custom condition.
 
 Pool `gateway` is not automatically installed as a second default route because
 pods normally already have a default route from the primary CNI. Add an explicit

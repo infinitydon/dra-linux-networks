@@ -179,8 +179,6 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %s
   restartPolicy: Never
-  readinessGates:
-    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: nic
       resourceClaimTemplateName: %s

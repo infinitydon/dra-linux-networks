@@ -34,8 +34,6 @@ spec:
       labels:
         app: linux-net-host-device-pool
     spec:
-      readinessGates:
-        - conditionType: linux-net.dra.infinitydon.com/NetworkReady
       resourceClaims:
         - name: nic
           resourceClaimTemplateName: linux-net-host-device-pool

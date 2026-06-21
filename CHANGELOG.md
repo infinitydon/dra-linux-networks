@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.1
+
+- Remove the custom `NetworkReady` readiness gate from standard examples and e2e workloads.
+- Use normal Kubernetes Pod readiness with DRA ResourceClaim status as the device source of truth.
+- Avoid Pod condition API operations when workloads do not explicitly request the legacy gate.
+- Verify gate-free CDI/DPDK and multi-node macvlan lifecycles in the live e2e suite.
+
 ## v0.3.0
 
 - Discover VFIO and UIO network-class PCI devices directly from sysfs.

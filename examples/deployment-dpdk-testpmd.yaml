@@ -35,8 +35,6 @@ spec:
       labels:
         app: linux-net-dpdk-testpmd
     spec:
-      readinessGates:
-        - conditionType: linux-net.dra.infinitydon.com/NetworkReady
       resourceClaims:
         - name: dpdk
           resourceClaimTemplateName: linux-net-dpdk

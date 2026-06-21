@@ -92,12 +92,17 @@ func TestMultiNodeIPAMConnectivity(t *testing.T) {
 		assertOutputContains(t, output, dynamicIP, *dynamicNode, dynamicPodName)
 	})
 
-	t.Run("PodsReportSecondaryNetworkReady", func(t *testing.T) {
+	t.Run("PodsUseStandardKubernetesReadiness", func(t *testing.T) {
 		for _, pod := range []string{staticPodName, dynamicPodName} {
-			status := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod,
+			customStatus := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod,
 				"-o", `jsonpath={.status.conditions[?(@.type=="linux-net.dra.infinitydon.com/NetworkReady")].status}`))
-			if status != "True" {
-				t.Fatalf("pod %s NetworkReady = %q, want True", pod, status)
+			if customStatus != "" {
+				t.Fatalf("pod %s has unexpected custom NetworkReady condition %q", pod, customStatus)
+			}
+			ready := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod,
+				"-o", `jsonpath={.status.conditions[?(@.type=="Ready")].status}`))
+			if ready != "True" {
+				t.Fatalf("pod %s standard Ready = %q, want True", pod, ready)
 			}
 		}
 	})
@@ -270,8 +275,6 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %[6]s
   restartPolicy: Never
-  readinessGates:
-    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: net1
       resourceClaimTemplateName: %[1]s
@@ -292,8 +295,6 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %[8]s
   restartPolicy: Never
-  readinessGates:
-    - conditionType: linux-net.dra.infinitydon.com/NetworkReady
   resourceClaims:
     - name: net1
       resourceClaimTemplateName: %[1]s
