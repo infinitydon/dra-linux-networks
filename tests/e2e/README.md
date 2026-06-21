@@ -30,6 +30,18 @@ KUBECONFIG=/path/to/kubeconfig go test -tags=e2e ./tests/e2e -v -args \
   -host-device-node ebpf-bng-node-02
 ```
 
+Run the DPDK discovery, CDI injection, status, and testpmd startup test on a
+worker with VFIO devices and at least two 1 GiB hugepages:
+
+```bash
+go test -tags=e2e ./tests/e2e -v -args \
+  -dpdk-node ebpf-bng-node-01
+```
+
+VFIO no-IOMMU devices require `dpdk.allowUnsafeNoIOMMU=true` in the Helm
+release. This mode does not provide DMA isolation and is intended only for
+explicitly trusted lab nodes.
+
 The test assigns two different physical NICs, verifies a third Pod cannot
 schedule, checks name and administrative-state restoration, and then verifies
 the released NIC can be allocated again.

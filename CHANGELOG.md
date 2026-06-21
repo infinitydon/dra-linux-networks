@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0
+
+- Discover VFIO and UIO network-class PCI devices directly from sysfs.
+- Publish exclusive DPDK devices with PCI identity, driver, NUMA and IOMMU attributes.
+- Resolve compatible kernel drivers through modalias data with operator overrides.
+- Inject userspace devices through claim-specific CDI specifications without CNI or IPAM.
+- Reject shared VFIO IOMMU groups and require explicit opt-in for unsafe no-IOMMU mode.
+- Add detailed ResourceClaim and multiline Pod DPDK status.
+- Add a project-owned testpmd image, Deployment example and DPDK injection e2e test.
+
 ## v0.2.0
 
 - Discover and publish NIC kernel driver, bus, PCI identity, and link state.

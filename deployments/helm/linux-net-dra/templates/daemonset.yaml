@@ -75,6 +75,17 @@ spec:
             - name: netns
               mountPath: /var/run/netns
               mountPropagation: Bidirectional
+            - name: host-sys
+              mountPath: /host/sys
+              readOnly: true
+            - name: host-dev
+              mountPath: /host/dev
+              readOnly: true
+            - name: host-modules
+              mountPath: /host/lib/modules
+              readOnly: true
+            - name: cdi
+              mountPath: /var/run/cdi
       volumes:
         - name: config
           configMap:
@@ -98,4 +109,20 @@ spec:
         - name: netns
           hostPath:
             path: /var/run/netns
+            type: DirectoryOrCreate
+        - name: host-sys
+          hostPath:
+            path: /sys
+            type: Directory
+        - name: host-dev
+          hostPath:
+            path: /dev
+            type: Directory
+        - name: host-modules
+          hostPath:
+            path: /lib/modules
+            type: Directory
+        - name: cdi
+          hostPath:
+            path: /var/run/cdi
             type: DirectoryOrCreate

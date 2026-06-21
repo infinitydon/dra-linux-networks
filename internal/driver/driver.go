@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containerd/nri/pkg/api"
@@ -52,16 +53,18 @@ type helper interface {
 }
 
 type Driver struct {
-	nodeName   string
-	driverName string
-	cfg        *config.Config
-	client     kubernetes.Interface
-	dynamic    dynamic.Interface
-	helper     helper
-	nri        stub.Stub
-	store      *Store
-	devices    map[string]config.InterfaceConfig
-	ipPools    map[string]config.IPPool
+	nodeName    string
+	driverName  string
+	cfg         *config.Config
+	client      kubernetes.Interface
+	dynamic     dynamic.Interface
+	helper      helper
+	nri         stub.Stub
+	store       *Store
+	devices     map[string]config.InterfaceConfig
+	dpdkMu      sync.RWMutex
+	dpdkDevices map[string]dpdkDevice
+	ipPools     map[string]config.IPPool
 }
 
 func Start(ctx context.Context, opts Options) (*Driver, error) {
@@ -90,14 +93,15 @@ func Start(ctx context.Context, opts Options) (*Driver, error) {
 	}
 
 	d := &Driver{
-		nodeName:   opts.NodeName,
-		driverName: opts.DriverName,
-		cfg:        opts.Config,
-		client:     opts.Client,
-		dynamic:    opts.DynamicClient,
-		store:      store,
-		devices:    map[string]config.InterfaceConfig{},
-		ipPools:    map[string]config.IPPool{},
+		nodeName:    opts.NodeName,
+		driverName:  opts.DriverName,
+		cfg:         opts.Config,
+		client:      opts.Client,
+		dynamic:     opts.DynamicClient,
+		store:       store,
+		devices:     map[string]config.InterfaceConfig{},
+		dpdkDevices: map[string]dpdkDevice{},
+		ipPools:     map[string]config.IPPool{},
 	}
 
 	for _, ifc := range opts.Config.Interfaces {
@@ -192,6 +196,23 @@ func (d *Driver) publish(ctx context.Context) error {
 			Attributes:               deviceAttributes(ifc, link, interfaceIdentity(ifc.Name)),
 			AllowMultipleAllocations: &allowMultiple,
 		})
+	}
+	if d.cfg.DPDK.Enabled {
+		discovered, err := discoverDPDKDevices(d.cfg.DPDK)
+		if err != nil {
+			return fmt.Errorf("discover DPDK devices: %w", err)
+		}
+		d.dpdkMu.Lock()
+		d.dpdkDevices = discovered
+		d.dpdkMu.Unlock()
+		for _, device := range discovered {
+			allowMultiple := false
+			devices = append(devices, resourceapi.Device{
+				Name:                     device.Name,
+				Attributes:               dpdkDeviceAttributes(device),
+				AllowMultipleAllocations: &allowMultiple,
+			})
+		}
 	}
 	resources := resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{
@@ -378,8 +399,19 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			continue
 		}
 		ifc, ok := d.devices[allocation.Device]
-		if !ok {
+		d.dpdkMu.RLock()
+		dpdk, dpdkOK := d.dpdkDevices[allocation.Device]
+		d.dpdkMu.RUnlock()
+		if !ok && !dpdkOK {
 			return kubeletplugin.PrepareResult{Err: fmt.Errorf("allocated unknown device %q", allocation.Device)}
+		}
+		if dpdkOK {
+			preparedDevice, err := d.prepareDPDKDevice(ctx, claim, pod, reserved.UID, allocation, dpdk)
+			if err != nil {
+				return kubeletplugin.PrepareResult{Err: err}
+			}
+			prepared = append(prepared, preparedDevice)
+			continue
 		}
 
 		netCfg := NetworkConfig{
@@ -489,6 +521,12 @@ func (d *Driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletpl
 			result[claim.UID] = fmt.Errorf("delete cluster IP allocation: %w", err)
 			continue
 		}
+		if d.cfg.DPDK.Enabled {
+			if err := removeClaimCDISpecs(d.cfg.DPDK.CDIPath, string(claim.UID)); err != nil {
+				result[claim.UID] = fmt.Errorf("remove CDI specification: %w", err)
+				continue
+			}
+		}
 		result[claim.UID] = d.store.DeleteClaim(claim.UID)
 	}
 	return result, nil
@@ -544,6 +582,20 @@ func (d *Driver) RunPodSandbox(ctx context.Context, pod *api.PodSandbox) error {
 		return fmt.Errorf("Pod %s/%s UID changed", pod.Namespace, pod.Name)
 	}
 	for deviceName, cfg := range podCfg.Devices {
+		if cfg.Network.Type == "dpdk" {
+			cfg.LifecycleState = "Injected"
+			if err := d.store.SetDevice(podUID, deviceName, cfg); err != nil {
+				return err
+			}
+			message := dpdkInjectedMessage(cfg)
+			if err := d.setResourceClaimDeviceStatus(ctx, cfg, true, "DPDKInjected", message, ""); err != nil {
+				return fmt.Errorf("report injected DPDK device status: %w", err)
+			}
+			if err := d.setPodNetworkStatus(ctx, kubePod.Namespace, kubePod.Name, kubePod.UID, cfg); err != nil {
+				return fmt.Errorf("report Pod DPDK status: %w", err)
+			}
+			continue
+		}
 		if cfg.AttachedIf == "" {
 			hardwareAddress := ""
 			var err error

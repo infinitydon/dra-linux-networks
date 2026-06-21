@@ -3,25 +3,35 @@ package driver
 import "k8s.io/apimachinery/pkg/types"
 
 const (
-	AttrPrefix       = "linux-net.dra.infinitydon.com"
-	AttrInterface    = AttrPrefix + "/interface"
-	AttrMAC          = AttrPrefix + "/mac"
-	AttrMTU          = AttrPrefix + "/mtu"
-	AttrDefault      = AttrPrefix + "/default"
-	AttrMacvlan      = AttrPrefix + "/macvlan"
-	AttrIPvlan       = AttrPrefix + "/ipvlan"
-	AttrTypes        = AttrPrefix + "/types"
-	AttrMacvlanModes = AttrPrefix + "/macvlanModes"
-	AttrIPvlanModes  = AttrPrefix + "/ipvlanModes"
-	AttrHostDevice   = AttrPrefix + "/hostDevice"
-	AttrKernelDriver = AttrPrefix + "/kernelDriver"
-	AttrBusType      = AttrPrefix + "/busType"
-	AttrPCIAddress   = AttrPrefix + "/pciAddress"
-	AttrPCIVendorID  = AttrPrefix + "/pciVendorID"
-	AttrPCIDeviceID  = AttrPrefix + "/pciDeviceID"
-	AttrAdminState   = AttrPrefix + "/adminState"
-	AttrOperState    = AttrPrefix + "/operState"
-	AttrPolicy       = AttrPrefix + "/allocationPolicy"
+	AttrPrefix            = "linux-net.dra.infinitydon.com"
+	AttrInterface         = AttrPrefix + "/interface"
+	AttrMAC               = AttrPrefix + "/mac"
+	AttrMTU               = AttrPrefix + "/mtu"
+	AttrDefault           = AttrPrefix + "/default"
+	AttrMacvlan           = AttrPrefix + "/macvlan"
+	AttrIPvlan            = AttrPrefix + "/ipvlan"
+	AttrTypes             = AttrPrefix + "/types"
+	AttrMacvlanModes      = AttrPrefix + "/macvlanModes"
+	AttrIPvlanModes       = AttrPrefix + "/ipvlanModes"
+	AttrHostDevice        = AttrPrefix + "/hostDevice"
+	AttrKernelDriver      = AttrPrefix + "/kernelDriver"
+	AttrBusType           = AttrPrefix + "/busType"
+	AttrPCIAddress        = AttrPrefix + "/pciAddress"
+	AttrPCIVendorID       = AttrPrefix + "/pciVendorID"
+	AttrPCIDeviceID       = AttrPrefix + "/pciDeviceID"
+	AttrAdminState        = AttrPrefix + "/adminState"
+	AttrOperState         = AttrPrefix + "/operState"
+	AttrPolicy            = AttrPrefix + "/allocationPolicy"
+	AttrDPDK              = AttrPrefix + "/dpdk"
+	AttrPCIClass          = AttrPrefix + "/pciClass"
+	AttrVendorName        = AttrPrefix + "/vendorName"
+	AttrDeviceName        = AttrPrefix + "/deviceName"
+	AttrSubsystemVendorID = AttrPrefix + "/subsystemVendorID"
+	AttrSubsystemDeviceID = AttrPrefix + "/subsystemDeviceID"
+	AttrCompatibleDriver  = AttrPrefix + "/compatibleKernelDriver"
+	AttrIOMMUGroup        = AttrPrefix + "/iommuGroup"
+	AttrIOMMUMode         = AttrPrefix + "/iommuMode"
+	AttrNUMANode          = AttrPrefix + "/numaNode"
 )
 
 type InterfaceIdentity struct {
@@ -30,6 +40,25 @@ type InterfaceIdentity struct {
 	PCIAddress   string `json:"pciAddress,omitempty"`
 	PCIVendorID  string `json:"pciVendorID,omitempty"`
 	PCIDeviceID  string `json:"pciDeviceID,omitempty"`
+}
+
+type DPDKDeviceState struct {
+	PCIAddress              string   `json:"pciAddress"`
+	PCIClass                string   `json:"pciClass,omitempty"`
+	VendorID                string   `json:"vendorID,omitempty"`
+	VendorName              string   `json:"vendorName,omitempty"`
+	DeviceID                string   `json:"deviceID,omitempty"`
+	DeviceName              string   `json:"deviceName,omitempty"`
+	SubsystemVendorID       string   `json:"subsystemVendorID,omitempty"`
+	SubsystemDeviceID       string   `json:"subsystemDeviceID,omitempty"`
+	CurrentDriver           string   `json:"currentDriver"`
+	CompatibleKernelDrivers []string `json:"compatibleKernelDrivers,omitempty"`
+	IOMMUGroup              string   `json:"iommuGroup,omitempty"`
+	IOMMUMode               string   `json:"iommuMode"`
+	NUMANode                int      `json:"numaNode"`
+	DeviceNodes             []string `json:"deviceNodes"`
+	CDIDeviceID             string   `json:"cdiDeviceID,omitempty"`
+	CDISpecPath             string   `json:"cdiSpecPath,omitempty"`
 }
 
 type HostDeviceState struct {
@@ -83,6 +112,7 @@ type DeviceConfig struct {
 	AllocationPolicy string               `json:"allocationPolicy"`
 	Identity         InterfaceIdentity    `json:"identity,omitempty"`
 	HostDevice       *HostDeviceState     `json:"hostDevice,omitempty"`
+	DPDK             *DPDKDeviceState     `json:"dpdk,omitempty"`
 	Network          NetworkConfig        `json:"network"`
 	AttachedIf       string               `json:"attachedInterface,omitempty"`
 	HardwareAddress  string               `json:"hardwareAddress,omitempty"`

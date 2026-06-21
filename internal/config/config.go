@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
 const DefaultDriverName = "linux-net.dra.infinitydon.com"
@@ -12,6 +13,29 @@ type Config struct {
 	DriverName string            `json:"driverName"`
 	Interfaces []InterfaceConfig `json:"interfaces"`
 	IPPools    []IPPool          `json:"ipPools"`
+	DPDK       DPDKConfig        `json:"dpdk"`
+}
+
+type DPDKConfig struct {
+	Enabled                   bool                `json:"enabled"`
+	AllowUnsafeNoIOMMU        bool                `json:"allowUnsafeNoIOMMU"`
+	SysfsPath                 string              `json:"sysfsPath"`
+	DevPath                   string              `json:"devPath"`
+	CDIHostDevPath            string              `json:"cdiHostDevPath"`
+	CDIPath                   string              `json:"cdiPath"`
+	PCIIDPath                 string              `json:"pciIDPath"`
+	ModulesPath               string              `json:"modulesPath"`
+	Drivers                   []string            `json:"drivers"`
+	PCIClasses                []string            `json:"pciClasses"`
+	Include                   PCISelector         `json:"include"`
+	Exclude                   PCISelector         `json:"exclude"`
+	CompatibleDriverOverrides map[string][]string `json:"compatibleDriverOverrides"`
+}
+
+type PCISelector struct {
+	Vendors      []string `json:"vendors"`
+	Devices      []string `json:"devices"`
+	PCIAddresses []string `json:"pciAddresses"`
 }
 
 type InterfaceConfig struct {
@@ -64,8 +88,11 @@ func Load(path string) (*Config, error) {
 	if cfg.DriverName == "" {
 		cfg.DriverName = DefaultDriverName
 	}
-	if len(cfg.Interfaces) == 0 {
+	if len(cfg.Interfaces) == 0 && !cfg.DPDK.Enabled {
 		return nil, fmt.Errorf("at least one interface must be configured")
+	}
+	if cfg.DPDK.Enabled {
+		setDPDKDefaults(&cfg.DPDK)
 	}
 	for i := range cfg.Interfaces {
 		if cfg.Interfaces[i].Name == "" {
@@ -132,4 +159,55 @@ func Load(path string) (*Config, error) {
 		}
 	}
 	return cfg, nil
+}
+
+func setDPDKDefaults(cfg *DPDKConfig) {
+	if cfg.SysfsPath == "" {
+		cfg.SysfsPath = "/sys"
+	}
+	if cfg.DevPath == "" {
+		cfg.DevPath = "/dev"
+	}
+	if cfg.CDIHostDevPath == "" {
+		cfg.CDIHostDevPath = "/dev"
+	}
+	if cfg.CDIPath == "" {
+		cfg.CDIPath = "/var/run/cdi"
+	}
+	if cfg.PCIIDPath == "" {
+		cfg.PCIIDPath = "/usr/share/misc/pci.ids"
+	}
+	if cfg.ModulesPath == "" {
+		cfg.ModulesPath = "/host/lib/modules"
+	}
+	if len(cfg.Drivers) == 0 {
+		cfg.Drivers = []string{"vfio-pci"}
+	}
+	if len(cfg.PCIClasses) == 0 {
+		cfg.PCIClasses = []string{"0200"}
+	}
+	for i := range cfg.Drivers {
+		cfg.Drivers[i] = normalize(cfg.Drivers[i])
+	}
+	for i := range cfg.PCIClasses {
+		cfg.PCIClasses[i] = normalize(cfg.PCIClasses[i])
+	}
+	normalizeSelector(&cfg.Include)
+	normalizeSelector(&cfg.Exclude)
+}
+
+func normalizeSelector(selector *PCISelector) {
+	for i := range selector.Vendors {
+		selector.Vendors[i] = normalize(selector.Vendors[i])
+	}
+	for i := range selector.Devices {
+		selector.Devices[i] = normalize(selector.Devices[i])
+	}
+	for i := range selector.PCIAddresses {
+		selector.PCIAddresses[i] = normalize(selector.PCIAddresses[i])
+	}
+}
+
+func normalize(value string) string {
+	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(value)), "0x")
 }

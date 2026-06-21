@@ -2,7 +2,8 @@
 
 `dra-linux-networks` is a Kubernetes Dynamic Resource Allocation (DRA) driver for
 creating Linux `macvlan` and `ipvlan` interfaces in pods without Multus
-`NetworkAttachmentDefinition` objects and without CNI secondary attachments.
+`NetworkAttachmentDefinition` objects and without CNI secondary attachments. It
+also allocates exclusive host NICs and userspace DPDK PCI devices.
 
 The driver uses:
 
@@ -11,6 +12,7 @@ The driver uses:
 - containerd NRI for pod sandbox network namespace attachment.
 - Linux netlink for `macvlan` and `ipvlan` creation.
 - Exclusive whole-NIC assignment with host-device lifecycle restoration.
+- Automatic PCI DPDK discovery and CDI-based VFIO/UIO device injection.
 - Cluster-scoped `IPAllocation` objects for multi-node IP uniqueness.
 - A controller Deployment for stale-allocation cleanup and pool status.
 
@@ -184,6 +186,60 @@ returns each NIC to the host and restores its original name, MAC, MTU, addresses
 and administrative state. Interfaces carrying a node IP, default route, or link
 master are rejected unless the operator explicitly sets `allowUnsafe: true`.
 
+## DPDK devices
+
+DPDK inventory is discovered from PCI sysfs. Operators define safety filters,
+not a static PCI address inventory:
+
+```yaml
+dpdk:
+  enabled: true
+  allowUnsafeNoIOMMU: false
+  drivers: [vfio-pci]
+  pciClasses: ["0200"]
+  include:
+    vendors: []
+    devices: []
+    pciAddresses: []
+  exclude:
+    pciAddresses: []
+  compatibleDriverOverrides:
+    "8086:154c": [iavf]
+```
+
+The driver publishes each eligible PCI function as an exclusive DRA device and
+reports its BDF, numeric IDs, manufacturer/model, current and compatible kernel
+drivers, NUMA node, IOMMU group and IOMMU mode. PCI addresses are optional
+include/exclude filters. Kernel driver candidates come from the device modalias
+and the host's `modules.alias`; overrides handle ambiguous devices.
+
+VFIO allocation is conservative: a function is published only when it is the
+sole member of its IOMMU group. This prevents separate claims from sharing one
+DMA-isolation boundary. Devices whose group contains multiple functions are
+withheld until whole-group allocation is implemented.
+
+During claim preparation the driver writes a claim-specific CDI specification.
+Kubelet passes its CDI ID to the runtime, which injects `/dev/vfio/vfio` and the
+allocated group device. No network namespace interface is created and DPDK
+configuration rejects all IPAM, gateway, route, interface-name and MTU fields.
+
+Safe IOMMU-backed VFIO is the default. VFIO no-IOMMU devices are advertised only
+with `allowUnsafeNoIOMMU: true`; this provides no DMA isolation and should be
+limited to explicitly trusted lab nodes. The driver maps host
+`/dev/vfio/noiommu-N` to `/dev/vfio/N` inside the workload.
+
+Run the project-owned testpmd workload after enabling DPDK discovery:
+
+```bash
+kubectl apply -f examples/deployment-dpdk-testpmd.yaml
+kubectl logs -l app=linux-net-dpdk-testpmd
+```
+
+The example requests two 1 GiB hugepages and uses the versioned
+`dra-linux-networks-dpdk-testpmd` image. Hugepage provisioning, CPU isolation and
+binding devices to a userspace driver remain node-administration concerns; the
+driver intentionally does not rebind PCI devices.
+
 ## Claim Parameters
 
 Workloads pass network intent through DRA opaque configuration:
@@ -201,7 +257,7 @@ opaque:
 
 Supported fields:
 
-- `type`: `macvlan` or `ipvlan`
+- `type`: `macvlan`, `ipvlan`, `host-device`, or `dpdk`
 - `mode`: macvlan `bridge`, `private`, `vepa`, `passthru`; ipvlan `l2`, `l3`, `l3s`
 - `interfaceName`: interface name inside the pod, default `net1`
 - `mtu`: pod interface MTU
@@ -244,6 +300,8 @@ contains the interface, addresses, MAC, IPPool, gateway, parent, link type and
 mode, ResourceClaim reference, and attachment state, so `kubectl describe pod`
 continues to show the network after Events expire. The JSON is stored with
 multiline indentation so `kubectl describe pod` keeps each field readable.
+DPDK entries omit IP and interface fields and include PCI manufacturer/model,
+driver candidates, NUMA node, IOMMU details, device nodes and the CDI device ID.
 
 The driver also emits `LinuxNetworkPrepared`, `LinuxNetworkAttached`, and
 `LinuxNetworkAttachFailed` Events against the Pod, so the lifecycle appears in

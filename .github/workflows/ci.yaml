@@ -36,5 +36,10 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/infinitydon/dra-linux-networks:0.2.0
+            ghcr.io/infinitydon/dra-linux-networks:0.3.0
             ghcr.io/infinitydon/dra-linux-networks:latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: tests/images/dpdk-testpmd
+          push: true
+          tags: ghcr.io/infinitydon/dra-linux-networks-dpdk-testpmd:0.3.0

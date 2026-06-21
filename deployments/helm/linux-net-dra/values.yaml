@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.2.0"
+  tag: "0.3.0"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -36,6 +36,29 @@ nri:
 state:
   hostPath: /var/run/linux-net-dra
   file: /var/run/linux-net-dra/state.json
+
+dpdk:
+  enabled: true
+  allowUnsafeNoIOMMU: false
+  sysfsPath: /host/sys
+  devPath: /host/dev
+  cdiHostDevPath: /dev
+  cdiPath: /var/run/cdi
+  pciIDPath: /usr/share/misc/pci.ids
+  modulesPath: /host/lib/modules
+  drivers:
+    - vfio-pci
+  pciClasses:
+    - "0200"
+  include:
+    vendors: []
+    devices: []
+    pciAddresses: []
+  exclude:
+    vendors: []
+    devices: []
+    pciAddresses: []
+  compatibleDriverOverrides: {}
 
 interfaces:
   - name: enp8s20
@@ -91,3 +114,7 @@ deviceClasses:
     name: linux-net-host-device
     type: host-device
     attribute: hostDevice
+  - create: true
+    name: linux-net-dpdk
+    type: dpdk
+    attribute: dpdk

@@ -1,0 +1,62 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: linux-net-dpdk
+spec:
+  spec:
+    devices:
+      requests:
+        - name: dpdk
+          exactly:
+            deviceClassName: linux-net-dpdk
+      config:
+        - requests: ["dpdk"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: dpdk
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linux-net-dpdk-testpmd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: linux-net-dpdk-testpmd
+  template:
+    metadata:
+      labels:
+        app: linux-net-dpdk-testpmd
+    spec:
+      readinessGates:
+        - conditionType: linux-net.dra.infinitydon.com/NetworkReady
+      resourceClaims:
+        - name: dpdk
+          resourceClaimTemplateName: linux-net-dpdk
+      containers:
+        - name: testpmd
+          image: ghcr.io/infinitydon/dra-linux-networks-dpdk-testpmd:0.3.0
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["IPC_LOCK", "SYS_RAWIO"]
+          resources:
+            requests:
+              cpu: "2"
+              memory: 512Mi
+              hugepages-1Gi: 2Gi
+            limits:
+              cpu: "2"
+              memory: 512Mi
+              hugepages-1Gi: 2Gi
+            claims:
+              - name: dpdk
+          volumeMounts:
+            - name: hugepages
+              mountPath: /dev/hugepages
+      volumes:
+        - name: hugepages
+          emptyDir:
+            medium: HugePages

@@ -44,6 +44,16 @@ type podNetworkStatus struct {
 	AllocationPolicy   string   `json:"allocationPolicy,omitempty"`
 	OriginalAdminState string   `json:"originalAdminState,omitempty"`
 	OriginalOperState  string   `json:"originalOperState,omitempty"`
+	VendorName         string   `json:"vendorName,omitempty"`
+	DeviceName         string   `json:"deviceName,omitempty"`
+	SubsystemVendorID  string   `json:"subsystemVendorID,omitempty"`
+	SubsystemDeviceID  string   `json:"subsystemDeviceID,omitempty"`
+	CompatibleDrivers  []string `json:"compatibleKernelDrivers,omitempty"`
+	IOMMUGroup         string   `json:"iommuGroup,omitempty"`
+	IOMMUMode          string   `json:"iommuMode,omitempty"`
+	NUMANode           int      `json:"numaNode,omitempty"`
+	DeviceNodes        []string `json:"deviceNodes,omitempty"`
+	CDIDeviceID        string   `json:"cdiDeviceID,omitempty"`
 }
 
 func (d *Driver) setResourceClaimDeviceStatus(ctx context.Context, cfg DeviceConfig, ready bool, reason, message, hardwareAddress string) error {
@@ -97,6 +107,19 @@ func allocatedDeviceStatus(claim *resourceapi.ResourceClaim, cfg DeviceConfig, r
 		dataValues["originalOperState"] = cfg.HostDevice.OriginalOperState
 		dataValues["originalMTU"] = cfg.HostDevice.OriginalMTU
 	}
+	if cfg.DPDK != nil {
+		dataValues["pciClass"] = cfg.DPDK.PCIClass
+		dataValues["vendorName"] = cfg.DPDK.VendorName
+		dataValues["deviceName"] = cfg.DPDK.DeviceName
+		dataValues["subsystemVendorID"] = cfg.DPDK.SubsystemVendorID
+		dataValues["subsystemDeviceID"] = cfg.DPDK.SubsystemDeviceID
+		dataValues["compatibleKernelDrivers"] = cfg.DPDK.CompatibleKernelDrivers
+		dataValues["iommuGroup"] = cfg.DPDK.IOMMUGroup
+		dataValues["iommuMode"] = cfg.DPDK.IOMMUMode
+		dataValues["numaNode"] = cfg.DPDK.NUMANode
+		dataValues["deviceNodes"] = cfg.DPDK.DeviceNodes
+		dataValues["cdiDeviceID"] = cfg.DPDK.CDIDeviceID
+	}
 	data, err := json.Marshal(dataValues)
 	if err != nil {
 		return resourceapi.AllocatedDeviceStatus{}, err
@@ -119,19 +142,22 @@ func allocatedDeviceStatus(claim *resourceapi.ResourceClaim, cfg DeviceConfig, r
 		Reason:             reason,
 		Message:            message,
 	})
-	return resourceapi.AllocatedDeviceStatus{
+	status := resourceapi.AllocatedDeviceStatus{
 		Driver:     cfg.DriverName,
 		Pool:       cfg.PoolName,
 		Device:     cfg.DeviceName,
 		ShareID:    cfg.ShareID,
 		Conditions: conditions,
 		Data:       &runtime.RawExtension{Raw: data},
-		NetworkData: &resourceapi.NetworkDeviceData{
+	}
+	if cfg.Network.Type != "dpdk" {
+		status.NetworkData = &resourceapi.NetworkDeviceData{
 			InterfaceName:   cfg.Network.InterfaceName,
 			IPs:             reportedAddresses(cfg),
 			HardwareAddress: hardwareAddress,
-		},
-	}, nil
+		}
+	}
+	return status, nil
 }
 
 func (d *Driver) removeResourceClaimDeviceStatus(ctx context.Context, claim types.NamespacedName) error {
@@ -257,6 +283,18 @@ func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string
 				status.OriginalAdminState = "up"
 			}
 			status.OriginalOperState = cfg.HostDevice.OriginalOperState
+		}
+		if cfg.DPDK != nil {
+			status.VendorName = cfg.DPDK.VendorName
+			status.DeviceName = cfg.DPDK.DeviceName
+			status.SubsystemVendorID = cfg.DPDK.SubsystemVendorID
+			status.SubsystemDeviceID = cfg.DPDK.SubsystemDeviceID
+			status.CompatibleDrivers = slices.Clone(cfg.DPDK.CompatibleKernelDrivers)
+			status.IOMMUGroup = cfg.DPDK.IOMMUGroup
+			status.IOMMUMode = cfg.DPDK.IOMMUMode
+			status.NUMANode = cfg.DPDK.NUMANode
+			status.DeviceNodes = slices.Clone(cfg.DPDK.DeviceNodes)
+			status.CDIDeviceID = cfg.DPDK.CDIDeviceID
 		}
 		replaced := false
 		for i := range statuses {
