@@ -18,7 +18,9 @@ RUN git clone --branch "${DPDK_VERSION}" --depth 1 https://github.com/DPDK/dpdk.
 FROM ubuntu:24.04
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates pciutils libnuma1 libpcap0.8 libelf1 && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates pciutils libnuma1 libpcap0.8 libelf1 libatomic1 \
+      libibverbs1 libmlx5-1 libmlx4-1 libmana1 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /usr/local/bin/dpdk-testpmd /usr/local/bin/dpdk-testpmd
