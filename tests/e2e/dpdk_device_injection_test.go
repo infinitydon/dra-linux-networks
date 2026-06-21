@@ -12,7 +12,7 @@ import (
 
 var (
 	dpdkNode  = flag.String("dpdk-node", "", "node with DPDK devices and hugepages")
-	dpdkImage = flag.String("dpdk-image", "ghcr.io/infinitydon/dra-linux-networks-dpdk-testpmd:0.3.0@sha256:5c90373e2ef12cfaa0c2fafaa09d75df25d7d3e6ad2eea6aaf7ba5fe61b86896", "pinned DPDK testpmd image")
+	dpdkImage = flag.String("dpdk-image", "ghcr.io/infinitydon/dra-linux-networks-dpdk-testpmd:0.3.0@sha256:4acf17c1e164eabf9771d8959ad9176c860fa83104af9261875bee0903209665", "pinned DPDK testpmd image")
 )
 
 const (
@@ -112,7 +112,7 @@ spec:
       image: %[4]s
       securityContext:
         capabilities:
-          add: ["IPC_LOCK", "SYS_RAWIO"]
+          add: ["IPC_LOCK", "SYS_ADMIN", "SYS_RAWIO"]
       resources:
         requests:
           cpu: "2"
