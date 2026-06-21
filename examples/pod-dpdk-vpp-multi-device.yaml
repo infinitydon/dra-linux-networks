@@ -1,0 +1,99 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: linux-net-dpdk-vpp-multi
+spec:
+  spec:
+    devices:
+      requests:
+        - name: dpdk
+          exactly:
+            deviceClassName: linux-net-dpdk
+            allocationMode: ExactCount
+            count: 2
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
+                    device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
+      config:
+        - requests: ["dpdk"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: dpdk
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: linux-net-dpdk-vpp-multi
+spec:
+  restartPolicy: Always
+  resourceClaims:
+    - name: dpdk
+      resourceClaimTemplateName: linux-net-dpdk-vpp-multi
+  containers:
+    - name: vpp
+      image: ligato/vpp-base:25.10-release@sha256:07014580a680b41f1fe21b7497a01ff28bbceb6d23eecfe0dc3174e23eb69541
+      command: ["/bin/sh", "-ec"]
+      args:
+        - |
+          cat >/tmp/vpp-startup.conf <<'EOF'
+          unix {
+            nodaemon
+            nobanner
+            cli-listen /run/vpp/cli.sock
+          }
+          api-segment { gid 0 }
+          cpu {
+            relative
+            main-core 0
+            workers 2
+          }
+          dpdk {
+          EOF
+          env | sort | while IFS='=' read -r name value; do
+            case "${name}" in
+              LINUX_NET_DRA_PCI_ADDRESS_PCI_*) echo "  dev ${value}" >>/tmp/vpp-startup.conf ;;
+            esac
+          done
+          cat >>/tmp/vpp-startup.conf <<'EOF'
+            uio-driver vfio-pci
+            no-multi-seg
+          }
+          EOF
+          test "$(grep -c '^  dev ' /tmp/vpp-startup.conf)" -eq 2
+          exec vpp -c /tmp/vpp-startup.conf
+      securityContext:
+        capabilities:
+          add: ["IPC_LOCK", "SYS_ADMIN", "SYS_RAWIO"]
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -ec
+            - test "$(vppctl -s /run/vpp/cli.sock show interface | grep -c '^VirtualFunctionEthernet')" -eq 2
+        initialDelaySeconds: 5
+        periodSeconds: 5
+      resources:
+        requests:
+          cpu: "3"
+          memory: 768Mi
+          hugepages-1Gi: 2Gi
+        limits:
+          cpu: "3"
+          memory: 768Mi
+          hugepages-1Gi: 2Gi
+        claims:
+          - name: dpdk
+      volumeMounts:
+        - name: hugepages
+          mountPath: /dev/hugepages
+        - name: run
+          mountPath: /run/vpp
+  volumes:
+    - name: hugepages
+      emptyDir:
+        medium: HugePages
+    - name: run
+      emptyDir: {}

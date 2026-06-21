@@ -311,9 +311,12 @@ func writeCDISpec(cfg config.DPDKConfig, driverName, claimUID, deviceName string
 		} `json:"containerEdits"`
 	}{Name: uniqueName})
 	spec.Devices[0].ContainerEdits.DeviceNodes = nodes
+	envSuffix := cdiEnvSuffix(deviceName)
 	spec.Devices[0].ContainerEdits.Env = []string{
 		"LINUX_NET_DRA_PCI_ADDRESS=" + state.PCIAddress,
 		"LINUX_NET_DRA_IOMMU_GROUP=" + state.IOMMUGroup,
+		"LINUX_NET_DRA_PCI_ADDRESS_" + envSuffix + "=" + state.PCIAddress,
+		"LINUX_NET_DRA_IOMMU_GROUP_" + envSuffix + "=" + state.IOMMUGroup,
 	}
 	data, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {
@@ -351,6 +354,18 @@ func writeCDISpec(cfg config.DPDKConfig, driverName, claimUID, deviceName string
 		}
 	}
 	return deviceID, finalPath, nil
+}
+
+func cdiEnvSuffix(deviceName string) string {
+	var result strings.Builder
+	for _, character := range strings.ToUpper(deviceName) {
+		if (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') {
+			result.WriteRune(character)
+		} else {
+			result.WriteByte('_')
+		}
+	}
+	return result.String()
 }
 
 func dpdkPreparedMessage(cfg DeviceConfig) string {

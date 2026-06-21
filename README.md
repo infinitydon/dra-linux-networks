@@ -232,21 +232,40 @@ kubectl apply -f examples/deployment-dpdk-testpmd.yaml
 kubectl logs -l app=linux-net-dpdk-testpmd
 ```
 
-Run two independent VPP 25.10 instances, each with its own generated claim and
-exclusive Intel VF:
+Run two independent VPP 25.10 instances, each with its own generated claim,
+exclusive Intel VF, and deterministic VPP interface address:
 
 ```bash
-kubectl apply -f examples/deployment-dpdk-vpp-pair.yaml
+kubectl apply -f examples/statefulset-dpdk-vpp-pair.yaml
 kubectl get pods -l app=linux-net-dpdk-vpp -o wide
-kubectl exec deploy/linux-net-dpdk-vpp -- \
-  vppctl -s /run/vpp/cli.sock show hardware-interfaces
+kubectl exec linux-net-dpdk-vpp-0 -- \
+  vppctl -s /run/vpp/cli.sock ping 192.168.88.21 repeat 3
+kubectl exec linux-net-dpdk-vpp-1 -- \
+  vppctl -s /run/vpp/cli.sock ping 192.168.88.20 repeat 3
 ```
 
 The VPP example pins
 [`ligato/vpp-base:25.10-release`](https://hub.docker.com/r/ligato/vpp-base)
 by digest. Each replica requests two CPUs and two 1 GiB hugepages. The e2e test
 verifies distinct PCI addresses and IOMMU groups, CDI-only VFIO nodes, VPP
-version, and Intel iAVF hardware discovery in both Pods.
+version, Intel iAVF hardware discovery, and bidirectional VPP traffic between
+`192.168.88.20/24` and `192.168.88.21/24`.
+
+A single Pod can request multiple DPDK functions by setting `allocationMode` to
+`ExactCount` and `count` to the required number. This example starts one VPP
+instance with two Intel VFs:
+
+```bash
+kubectl apply -f examples/pod-dpdk-vpp-multi-device.yaml
+kubectl exec linux-net-dpdk-vpp-multi -- \
+  vppctl -s /run/vpp/cli.sock show hardware-interfaces
+```
+
+Every allocated function contributes a unique
+`LINUX_NET_DRA_PCI_ADDRESS_PCI_*` and `LINUX_NET_DRA_IOMMU_GROUP_PCI_*`
+environment variable. The singular variables remain available for
+single-device workloads. ResourceClaim and Pod network status contain one
+entry per allocated PCI function.
 
 The example requests two 1 GiB hugepages and uses the versioned
 `dra-linux-networks-dpdk-testpmd` image, built from DPDK v26.03. Hugepage provisioning, CPU isolation and

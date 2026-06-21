@@ -298,7 +298,10 @@ func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string
 		}
 		replaced := false
 		for i := range statuses {
-			if statuses[i].ClaimNamespace == status.ClaimNamespace && statuses[i].ClaimName == status.ClaimName && statuses[i].InterfaceName == status.InterfaceName {
+			if statuses[i].ClaimNamespace == status.ClaimNamespace &&
+				statuses[i].ClaimName == status.ClaimName &&
+				statuses[i].InterfaceName == status.InterfaceName &&
+				(status.PCIAddress == "" || statuses[i].PCIAddress == status.PCIAddress) {
 				statuses[i] = status
 				replaced = true
 				break
@@ -309,6 +312,9 @@ func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string
 		}
 		sort.Slice(statuses, func(i, j int) bool {
 			if statuses[i].InterfaceName == statuses[j].InterfaceName {
+				if statuses[i].ClaimName == statuses[j].ClaimName {
+					return statuses[i].PCIAddress < statuses[j].PCIAddress
+				}
 				return statuses[i].ClaimName < statuses[j].ClaimName
 			}
 			return statuses[i].InterfaceName < statuses[j].InterfaceName

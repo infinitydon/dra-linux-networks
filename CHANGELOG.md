@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.4
+
+- Add deterministic VPP interface addresses and bidirectional ping validation to the two-instance DPDK example.
+- Support collision-free CDI environment metadata for multiple DPDK functions in one container.
+- Preserve every allocated PCI function in ResourceClaim and Pod network status.
+- Add an `ExactCount: 2` VPP example and e2e coverage for multi-device DPDK claims.
+
 ## v0.3.3
 
 - Treat omitted `pciClasses` as the safe Ethernet `0200` default.

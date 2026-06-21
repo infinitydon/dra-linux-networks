@@ -137,3 +137,34 @@ func TestPodNetworkStatusAnnotationIsDurableAndMerged(t *testing.T) {
 		t.Fatalf("network status is not pretty-printed: %q", raw)
 	}
 }
+
+func TestPodNetworkStatusKeepsMultipleDPDKDevicesFromOneClaim(t *testing.T) {
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Namespace: "default", Name: "pod-dpdk", UID: types.UID("pod-uid"),
+	}}
+	client := kubernetesfake.NewSimpleClientset(pod)
+	driver := &Driver{client: client}
+	for _, address := range []string{"0000:02:00.0", "0000:03:00.0"} {
+		cfg := DeviceConfig{
+			Claim:      types.NamespacedName{Namespace: "default", Name: "claim-dpdk"},
+			ParentName: address,
+			Identity:   InterfaceIdentity{PCIAddress: address, KernelDriver: "vfio-pci"},
+			Network:    NetworkConfig{Type: "dpdk"},
+			DPDK:       &DPDKDeviceState{PCIAddress: address, CurrentDriver: "vfio-pci"},
+		}
+		if err := driver.setPodNetworkStatus(context.Background(), pod.Namespace, pod.Name, pod.UID, cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	updated, err := client.CoreV1().Pods(pod.Namespace).Get(context.Background(), pod.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var statuses []podNetworkStatus
+	if err := json.Unmarshal([]byte(updated.Annotations[NetworkStatusAnnotation]), &statuses); err != nil {
+		t.Fatal(err)
+	}
+	if len(statuses) != 2 || statuses[0].PCIAddress != "0000:02:00.0" || statuses[1].PCIAddress != "0000:03:00.0" {
+		t.Fatalf("multi-device DPDK statuses = %+v", statuses)
+	}
+}

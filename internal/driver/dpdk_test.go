@@ -82,6 +82,7 @@ func TestWriteCDISpecMapsNoIOMMUNode(t *testing.T) {
 					HostPath string `json:"hostPath"`
 					Path     string `json:"path"`
 				} `json:"deviceNodes"`
+				Env []string `json:"env"`
 			} `json:"containerEdits"`
 		} `json:"devices"`
 	}
@@ -91,6 +92,11 @@ func TestWriteCDISpecMapsNoIOMMUNode(t *testing.T) {
 	got := spec.Devices[0].ContainerEdits.DeviceNodes[1]
 	if got.HostPath != "/dev/vfio/noiommu-4" || got.Path != "/dev/vfio/4" {
 		t.Fatalf("no-IOMMU mapping = %+v", got)
+	}
+	env := strings.Join(spec.Devices[0].ContainerEdits.Env, "\n")
+	if !strings.Contains(env, "LINUX_NET_DRA_PCI_ADDRESS_PCI_0000_01_00_0=0000:01:00.0") ||
+		!strings.Contains(env, "LINUX_NET_DRA_IOMMU_GROUP_PCI_0000_01_00_0=4") {
+		t.Fatalf("device-qualified CDI environment is missing: %s", env)
 	}
 	if err := removeClaimCDISpecs(dir, "claim-uid"); err != nil {
 		t.Fatal(err)

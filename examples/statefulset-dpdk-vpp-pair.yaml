@@ -21,11 +21,21 @@ spec:
             parameters:
               type: dpdk
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Service
 metadata:
   name: linux-net-dpdk-vpp
 spec:
+  clusterIP: None
+  selector:
+    app: linux-net-dpdk-vpp
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: linux-net-dpdk-vpp
+spec:
+  serviceName: linux-net-dpdk-vpp
   replicas: 2
   selector:
     matchLabels:
@@ -62,13 +72,38 @@ spec:
                 no-multi-seg
               }
               EOF
-              exec vpp -c /tmp/vpp-startup.conf
+              vpp -c /tmp/vpp-startup.conf &
+              VPP_PID=$!
+              trap 'kill ${VPP_PID} 2>/dev/null || true' TERM INT
+              for attempt in $(seq 1 30); do
+                if vppctl -s /run/vpp/cli.sock show version >/dev/null 2>&1; then
+                  break
+                fi
+                sleep 1
+              done
+              INTERFACE=$(vppctl -s /run/vpp/cli.sock show interface | awk '/VirtualFunctionEthernet/ { print $1; exit }')
+              case "${POD_NAME}" in
+                *-0) ADDRESS=192.168.88.20/24 ;;
+                *-1) ADDRESS=192.168.88.21/24 ;;
+                *) echo "Unexpected StatefulSet Pod name ${POD_NAME}" >&2; exit 1 ;;
+              esac
+              vppctl -s /run/vpp/cli.sock set interface state "${INTERFACE}" up
+              vppctl -s /run/vpp/cli.sock set interface ip address "${INTERFACE}" "${ADDRESS}"
+              wait "${VPP_PID}"
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           securityContext:
             capabilities:
               add: ["IPC_LOCK", "SYS_ADMIN", "SYS_RAWIO"]
           readinessProbe:
             exec:
-              command: ["vppctl", "-s", "/run/vpp/cli.sock", "show", "version"]
+              command:
+                - /bin/sh
+                - -ec
+                - vppctl -s /run/vpp/cli.sock show interface address | grep -q '192.168.88.'
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:

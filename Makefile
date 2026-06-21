@@ -1,9 +1,9 @@
-IMAGE ?= ghcr.io/infinitydon/dra-linux-networks:0.3.3
+IMAGE ?= ghcr.io/infinitydon/dra-linux-networks:0.3.4
 HOST_DEVICE_NODE ?= ebpf-bng-node-02
 STATIC_ADDRESS ?= 192.168.88.10/24
 GATEWAY ?= 192.168.88.1
 
-.PHONY: test test-e2e-multi-node test-e2e-host-device test-e2e-dpdk test-e2e-vpp build image
+.PHONY: test test-e2e-multi-node test-e2e-host-device test-e2e-dpdk test-e2e-vpp test-e2e-vpp-multi build image
 
 test:
 	go test ./...
@@ -19,6 +19,9 @@ test-e2e-dpdk:
 
 test-e2e-vpp:
 	go test -tags=e2e ./tests/e2e -v -run TestTwoVPPInstancesReceiveExclusiveDPDKDevices -args -dpdk-node "$(DPDK_NODE)"
+
+test-e2e-vpp-multi:
+	go test -tags=e2e ./tests/e2e -v -run TestSingleVPPReceivesTwoDPDKDevices -args -dpdk-node "$(DPDK_NODE)"
 
 build:
 	go build ./cmd/linux-net-dra
