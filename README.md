@@ -236,7 +236,7 @@ kubectl logs -l app=linux-net-dpdk-testpmd
 ```
 
 The example requests two 1 GiB hugepages and uses the versioned
-`dra-linux-networks-dpdk-testpmd` image. Hugepage provisioning, CPU isolation and
+`dra-linux-networks-dpdk-testpmd` image, built from DPDK v26.03. Hugepage provisioning, CPU isolation and
 binding devices to a userspace driver remain node-administration concerns; the
 driver intentionally does not rebind PCI devices.
 
