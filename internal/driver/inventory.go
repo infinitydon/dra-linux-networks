@@ -6,9 +6,15 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/vishvananda/netlink"
+)
+
+var (
+	pciAddressPattern = regexp.MustCompile(`^[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9a-fA-F]$`)
+	pcieRootPattern   = regexp.MustCompile(`^pci[0-9a-fA-F]{4}:[0-9a-fA-F]{2}$`)
 )
 
 func interfaceIdentity(name string) InterfaceIdentity {
@@ -19,11 +25,11 @@ func interfaceIdentityAt(sysClassNet, name string) InterfaceIdentity {
 	identity := InterfaceIdentity{}
 	devicePath := filepath.Join(sysClassNet, name, "device")
 	if target, err := filepath.EvalSymlinks(devicePath); err == nil {
+		identity.PCIAddress, identity.PCIeRoot = pciTopologyFromPath(target)
 		base := filepath.Base(target)
 		switch {
-		case strings.HasPrefix(base, "0000:") || strings.Count(base, ":") == 2:
+		case pciAddressPattern.MatchString(base):
 			identity.BusType = "pci"
-			identity.PCIAddress = base
 		case strings.HasPrefix(base, "virtio"):
 			identity.BusType = "virtio"
 		default:
@@ -52,6 +58,33 @@ func interfaceIdentityAt(sysClassNet, name string) InterfaceIdentity {
 		identity.PCIDeviceID = trimHexFile(filepath.Join(devicePath, "device"))
 	}
 	return identity
+}
+
+func pciTopologyAt(sysfsPath, pciAddress string) (string, string) {
+	target, err := filepath.EvalSymlinks(filepath.Join(sysfsPath, "bus", "pci", "devices", pciAddress))
+	if err != nil {
+		return strings.ToLower(pciAddress), ""
+	}
+	address, root := pciTopologyFromPath(target)
+	if address == "" {
+		address = strings.ToLower(pciAddress)
+	}
+	return address, root
+}
+
+func pciTopologyFromPath(path string) (string, string) {
+	var address, root string
+	for _, component := range strings.FieldsFunc(filepath.Clean(path), func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		switch {
+		case pcieRootPattern.MatchString(component) && root == "":
+			root = strings.ToLower(component)
+		case pciAddressPattern.MatchString(component):
+			address = strings.ToLower(component)
+		}
+	}
+	return address, root
 }
 
 func readUevent(path string) map[string]string {

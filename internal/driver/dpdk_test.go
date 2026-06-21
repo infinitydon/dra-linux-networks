@@ -46,13 +46,15 @@ func TestValidateDPDKConfigRejectsIPAM(t *testing.T) {
 }
 
 func TestDPDKAttributesDefineEveryDeviceClassCapability(t *testing.T) {
-	attrs := dpdkDeviceAttributes(dpdkDevice{State: DPDKDeviceState{PCIAddress: "0000:01:00.0"}})
+	attrs := dpdkDeviceAttributes(dpdkDevice{State: DPDKDeviceState{PCIAddress: "0000:01:00.0", PCIeRoot: "pci0000:00"}})
 	for _, name := range []string{AttrDPDK, AttrMacvlan, AttrIPvlan, AttrHostDevice} {
 		attribute, ok := attrs[resourceapi.QualifiedName(name)]
 		if !ok || attribute.BoolValue == nil {
 			t.Fatalf("capability %s is not defined", name)
 		}
 	}
+	assertStringAttribute(t, attrs, AttrStandardPCIBusID, "0000:01:00.0")
+	assertStringAttribute(t, attrs, AttrStandardPCIeRoot, "pci0000:00")
 }
 
 func TestWriteCDISpecMapsNoIOMMUNode(t *testing.T) {

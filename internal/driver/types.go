@@ -32,18 +32,22 @@ const (
 	AttrIOMMUGroup        = AttrPrefix + "/iommuGroup"
 	AttrIOMMUMode         = AttrPrefix + "/iommuMode"
 	AttrNUMANode          = AttrPrefix + "/numaNode"
+	AttrStandardPCIBusID  = "resource.kubernetes.io/pciBusID"
+	AttrStandardPCIeRoot  = "resource.kubernetes.io/pcieRoot"
 )
 
 type InterfaceIdentity struct {
 	KernelDriver string `json:"kernelDriver,omitempty"`
 	BusType      string `json:"busType,omitempty"`
 	PCIAddress   string `json:"pciAddress,omitempty"`
+	PCIeRoot     string `json:"pcieRoot,omitempty"`
 	PCIVendorID  string `json:"pciVendorID,omitempty"`
 	PCIDeviceID  string `json:"pciDeviceID,omitempty"`
 }
 
 type DPDKDeviceState struct {
 	PCIAddress              string   `json:"pciAddress"`
+	PCIeRoot                string   `json:"pcieRoot,omitempty"`
 	PCIClass                string   `json:"pciClass,omitempty"`
 	VendorID                string   `json:"vendorID,omitempty"`
 	VendorName              string   `json:"vendorName,omitempty"`

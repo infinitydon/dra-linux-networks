@@ -86,7 +86,16 @@ macvlan parent with a CEL selector; see
 
 A single ResourceClaimTemplate can request several device types. The
 `examples/deployment-macvlan-dpdk.yaml` workload creates one claim containing a
-macvlan request pinned to `enp8s20` and an Intel VF DPDK request.
+macvlan request pinned to `enp8s20` and an Intel VF DPDK request. Its
+`matchAttribute: resource.kubernetes.io/pcieRoot` constraint requires both
+allocations to share a PCIe root complex.
+
+For PCI-backed kernel interfaces and DPDK functions, the driver publishes the
+standard `resource.kubernetes.io/pciBusID` and
+`resource.kubernetes.io/pcieRoot` attributes. PCIe roots are resolved from the
+sysfs device hierarchy and use Kubernetes' `pci<domain>:<bus>` format. Devices
+without resolvable PCI ancestry do not advertise these attributes and cannot
+satisfy claims that require PCIe-root alignment.
 
 The chart installs the `IPPool` CRD but does not create any pool instances.
 The example pool is operator-owned and contains:

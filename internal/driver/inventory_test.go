@@ -26,12 +26,43 @@ func TestInterfaceIdentityFromSysfs(t *testing.T) {
 	}
 }
 
+func TestPCITopologyFromResolvedSysfsPath(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		path        string
+		wantAddress string
+		wantRoot    string
+	}{
+		{
+			name:        "virtio child",
+			path:        "/sys/devices/pci0000:00/0000:00:1e.0/0000:07:01.0/0000:08:14.0/virtio5",
+			wantAddress: "0000:08:14.0",
+			wantRoot:    "pci0000:00",
+		},
+		{
+			name:        "different root",
+			path:        "/sys/devices/pci0001:80/0001:80:02.0/0001:81:00.0",
+			wantAddress: "0001:81:00.0",
+			wantRoot:    "pci0001:80",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			address, root := pciTopologyFromPath(test.path)
+			if address != test.wantAddress || root != test.wantRoot {
+				t.Fatalf("topology = (%q, %q), want (%q, %q)", address, root, test.wantAddress, test.wantRoot)
+			}
+		})
+	}
+}
+
 func TestExclusiveHostDeviceAttributes(t *testing.T) {
 	ifc := config.InterfaceConfig{Name: "enp8s21", AllocationPolicy: "exclusive", Types: []string{"host-device"}}
-	attrs := deviceAttributesFromValues(ifc, "02:00:00:00:00:01", 1500, InterfaceIdentity{KernelDriver: "e1000", PCIAddress: "0000:00:15.0"})
+	attrs := deviceAttributesFromValues(ifc, "02:00:00:00:00:01", 1500, InterfaceIdentity{KernelDriver: "e1000", PCIAddress: "0000:00:15.0", PCIeRoot: "pci0000:00"})
 	assertStringAttribute(t, attrs, AttrPolicy, "exclusive")
 	assertStringAttribute(t, attrs, AttrKernelDriver, "e1000")
 	assertStringAttribute(t, attrs, AttrPCIAddress, "0000:00:15.0")
+	assertStringAttribute(t, attrs, AttrStandardPCIBusID, "0000:00:15.0")
+	assertStringAttribute(t, attrs, AttrStandardPCIeRoot, "pci0000:00")
 	if value := attrs[resourceapi.QualifiedName(AttrHostDevice)].BoolValue; value == nil || !*value {
 		t.Fatal("hostDevice attribute is not true")
 	}

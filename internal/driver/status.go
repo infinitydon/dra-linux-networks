@@ -39,6 +39,7 @@ type podNetworkStatus struct {
 	KernelDriver       string   `json:"kernelDriver,omitempty"`
 	BusType            string   `json:"busType,omitempty"`
 	PCIAddress         string   `json:"pciAddress,omitempty"`
+	PCIeRoot           string   `json:"pcieRoot,omitempty"`
 	PCIVendorID        string   `json:"pciVendorID,omitempty"`
 	PCIDeviceID        string   `json:"pciDeviceID,omitempty"`
 	AllocationPolicy   string   `json:"allocationPolicy,omitempty"`
@@ -96,6 +97,7 @@ func allocatedDeviceStatus(claim *resourceapi.ResourceClaim, cfg DeviceConfig, r
 		"kernelDriver":      cfg.Identity.KernelDriver,
 		"busType":           cfg.Identity.BusType,
 		"pciAddress":        cfg.Identity.PCIAddress,
+		"pcieRoot":          cfg.Identity.PCIeRoot,
 		"pciVendorID":       cfg.Identity.PCIVendorID,
 		"pciDeviceID":       cfg.Identity.PCIDeviceID,
 		"allocationPolicy":  cfg.AllocationPolicy,
@@ -273,6 +275,7 @@ func (d *Driver) setPodNetworkStatus(ctx context.Context, namespace, name string
 			KernelDriver:     cfg.Identity.KernelDriver,
 			BusType:          cfg.Identity.BusType,
 			PCIAddress:       cfg.Identity.PCIAddress,
+			PCIeRoot:         cfg.Identity.PCIeRoot,
 			PCIVendorID:      cfg.Identity.PCIVendorID,
 			PCIDeviceID:      cfg.Identity.PCIDeviceID,
 			AllocationPolicy: cfg.AllocationPolicy,

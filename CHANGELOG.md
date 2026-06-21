@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.0
+
+- Discover PCI function and root-complex topology from nested sysfs paths, including virtio netdevices.
+- Publish standard `resource.kubernetes.io/pciBusID` and `resource.kubernetes.io/pcieRoot` attributes.
+- Include PCIe-root topology in ResourceClaim and multiline Pod network status.
+- Require the combined macvlan and DPDK example to allocate devices under the same PCIe root.
+- Add synthetic topology tests for matching and different PCI root complexes.
+
 ## v0.3.8
 
 - Align public inventory examples with the test cluster's `enp8s20`, `enp8s21`, and `enp8s22` interfaces.

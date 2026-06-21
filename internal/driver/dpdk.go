@@ -54,6 +54,7 @@ func (d *Driver) prepareDPDKDevice(ctx context.Context, claim *resourceapi.Resou
 			KernelDriver: state.CurrentDriver,
 			BusType:      "pci",
 			PCIAddress:   state.PCIAddress,
+			PCIeRoot:     state.PCIeRoot,
 			PCIVendorID:  state.VendorID,
 			PCIDeviceID:  state.DeviceID,
 		},
@@ -132,8 +133,10 @@ func discoverDPDKDevices(cfg config.DPDKConfig) (map[string]dpdkDevice, error) {
 			}
 		}
 		compatible := compatibleKernelDrivers(cfg, devicePath, vendor, device, driver)
+		_, pcieRoot := pciTopologyAt(cfg.SysfsPath, address)
 		state := DPDKDeviceState{
 			PCIAddress:              address,
+			PCIeRoot:                pcieRoot,
 			PCIClass:                class,
 			VendorID:                vendor,
 			VendorName:              names["v:"+vendor],
@@ -260,6 +263,8 @@ func dpdkDeviceAttributes(device dpdkDevice) map[resourceapi.QualifiedName]resou
 	setStringAttribute(attrs, AttrPolicy, "exclusive")
 	setStringAttribute(attrs, AttrBusType, "pci")
 	setStringAttribute(attrs, AttrPCIAddress, device.State.PCIAddress)
+	setStringAttribute(attrs, AttrStandardPCIBusID, device.State.PCIAddress)
+	setStringAttribute(attrs, AttrStandardPCIeRoot, device.State.PCIeRoot)
 	setStringAttribute(attrs, AttrPCIClass, device.State.PCIClass)
 	setStringAttribute(attrs, AttrPCIVendorID, device.State.VendorID)
 	setStringAttribute(attrs, AttrPCIDeviceID, device.State.DeviceID)

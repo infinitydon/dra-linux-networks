@@ -878,6 +878,8 @@ func setIdentityAttributes(attrs map[resourceapi.QualifiedName]resourceapi.Devic
 	setStringAttribute(attrs, AttrKernelDriver, identity.KernelDriver)
 	setStringAttribute(attrs, AttrBusType, identity.BusType)
 	setStringAttribute(attrs, AttrPCIAddress, identity.PCIAddress)
+	setStringAttribute(attrs, AttrStandardPCIBusID, identity.PCIAddress)
+	setStringAttribute(attrs, AttrStandardPCIeRoot, identity.PCIeRoot)
 	setStringAttribute(attrs, AttrPCIVendorID, identity.PCIVendorID)
 	setStringAttribute(attrs, AttrPCIDeviceID, identity.PCIDeviceID)
 }
