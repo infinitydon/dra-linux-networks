@@ -251,9 +251,19 @@ verifies distinct PCI addresses and IOMMU groups, CDI-only VFIO nodes, VPP
 version, Intel iAVF hardware discovery, and bidirectional VPP traffic between
 `192.168.88.20/24` and `192.168.88.21/24`.
 
-A single Pod can request multiple DPDK functions by setting `allocationMode` to
-`ExactCount` and `count` to the required number. This example starts one VPP
-instance with two Intel VFs:
+A single Pod can request multiple DPDK functions with the Kubernetes 1.36+
+DRA-backed extended-resource API. The scalar value is the number of devices:
+
+```yaml
+resources:
+  limits:
+    deviceclass.resource.kubernetes.io/linux-net-dpdk-intel-vf: 2
+```
+
+The DeviceClass holds the reusable driver and hardware selectors. The scheduler
+creates one Pod-owned ResourceClaim with `ExactCount: 2`; no
+ResourceClaimTemplate is required. This example defines an Intel VF class and
+starts one VPP instance with two matching devices:
 
 ```bash
 kubectl apply -f examples/pod-dpdk-vpp-multi-device.yaml

@@ -1,27 +1,15 @@
 apiVersion: resource.k8s.io/v1
-kind: ResourceClaimTemplate
+kind: DeviceClass
 metadata:
-  name: linux-net-dpdk-vpp-multi
+  name: linux-net-dpdk-intel-vf
 spec:
-  spec:
-    devices:
-      requests:
-        - name: dpdk
-          exactly:
-            deviceClassName: linux-net-dpdk
-            allocationMode: ExactCount
-            count: 2
-            selectors:
-              - cel:
-                  expression: >-
-                    device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
-                    device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
-      config:
-        - requests: ["dpdk"]
-          opaque:
-            driver: linux-net.dra.infinitydon.com
-            parameters:
-              type: dpdk
+  selectors:
+    - cel:
+        expression: >-
+          device.driver == 'linux-net.dra.infinitydon.com' &&
+          device.attributes['linux-net.dra.infinitydon.com'].dpdk == true &&
+          device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
+          device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
 ---
 apiVersion: v1
 kind: Pod
@@ -29,9 +17,6 @@ metadata:
   name: linux-net-dpdk-vpp-multi
 spec:
   restartPolicy: Always
-  resourceClaims:
-    - name: dpdk
-      resourceClaimTemplateName: linux-net-dpdk-vpp-multi
   containers:
     - name: vpp
       image: ligato/vpp-base:25.10-release@sha256:07014580a680b41f1fe21b7497a01ff28bbceb6d23eecfe0dc3174e23eb69541
@@ -80,12 +65,12 @@ spec:
           cpu: "3"
           memory: 768Mi
           hugepages-1Gi: 2Gi
+          deviceclass.resource.kubernetes.io/linux-net-dpdk-intel-vf: "2"
         limits:
           cpu: "3"
           memory: 768Mi
           hugepages-1Gi: 2Gi
-        claims:
-          - name: dpdk
+          deviceclass.resource.kubernetes.io/linux-net-dpdk-intel-vf: "2"
       volumeMounts:
         - name: hugepages
           mountPath: /dev/hugepages

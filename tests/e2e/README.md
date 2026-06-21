@@ -56,7 +56,8 @@ go test -tags=e2e ./tests/e2e -v \
   -dpdk-node ebpf-bng-node-01
 ```
 
-Run one VPP instance with two exclusive DPDK functions from one claim:
+Run one VPP instance with a scalar Pod request for two exclusive DPDK
+functions. Kubernetes creates the ResourceClaim automatically:
 
 ```bash
 go test -tags=e2e ./tests/e2e -v \
@@ -64,6 +65,6 @@ go test -tags=e2e ./tests/e2e -v \
   -dpdk-node ebpf-bng-node-01
 ```
 
-This verifies both PCI functions, VFIO groups, CDI device nodes, unique PCI
-environment variables, Pod status entries, ResourceClaim status entries, and
-VPP hardware discovery.
+This verifies the scheduler-generated claim, both PCI functions, VFIO groups,
+CDI device nodes, unique PCI environment variables, Pod and ResourceClaim
+status entries, and VPP hardware discovery.

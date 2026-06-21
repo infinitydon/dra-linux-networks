@@ -13,7 +13,7 @@ const (
 	vppClaimTemplate = "linux-net-e2e-dpdk-vpp"
 	vppDeployment    = "linux-net-e2e-dpdk-vpp"
 	vppImage         = "ligato/vpp-base:25.10-release@sha256:07014580a680b41f1fe21b7497a01ff28bbceb6d23eecfe0dc3174e23eb69541"
-	vppMultiTemplate = "linux-net-e2e-dpdk-vpp-multi"
+	vppMultiClass    = "linux-net-e2e-dpdk-vpp-multi"
 	vppMultiPod      = "linux-net-e2e-dpdk-vpp-multi"
 )
 
@@ -31,7 +31,7 @@ func TestSingleVPPReceivesTwoDPDKDevices(t *testing.T) {
 	}
 	cleanup := func() {
 		_, _ = kubectl(nil, "-n", *namespace, "delete", "pod", vppMultiPod, "--ignore-not-found", "--wait=true")
-		_, _ = kubectl(nil, "-n", *namespace, "delete", "resourceclaimtemplate", vppMultiTemplate, "--ignore-not-found")
+		_, _ = kubectl(nil, "delete", "deviceclass", vppMultiClass, "--ignore-not-found")
 	}
 	cleanup()
 	if !*keepResources {
@@ -62,12 +62,47 @@ vppctl -s /run/vpp/cli.sock show hardware-interfaces
 		t.Fatalf("VPP did not initialize two Intel VFs:\n%s", output)
 	}
 
-	claim := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", vppMultiPod, "-o", "jsonpath={.status.resourceClaimStatuses[0].resourceClaimName}"))
+	claim := extendedResourceClaimForPod(t, vppMultiPod)
 	claimStatus := mustKubectl(t, "-n", *namespace, "get", "resourceclaim", claim,
 		"-o", `jsonpath={range .status.devices[*]}{.conditions[?(@.type=="Ready")].status}{" "}{.data.pciAddress}{"\n"}{end}`)
 	if strings.Count(claimStatus, "True") != 2 {
 		t.Fatalf("ResourceClaim does not report two ready devices:\n%s", claimStatus)
 	}
+}
+
+func extendedResourceClaimForPod(t *testing.T, pod string) string {
+	t.Helper()
+	podUID := strings.TrimSpace(mustKubectl(t, "-n", *namespace, "get", "pod", pod, "-o", "jsonpath={.metadata.uid}"))
+	raw := mustKubectl(t, "-n", *namespace, "get", "resourceclaims", "-o", "json")
+	var claims struct {
+		Items []struct {
+			Metadata struct {
+				Name            string            `json:"name"`
+				Annotations     map[string]string `json:"annotations"`
+				OwnerReferences []struct {
+					UID string `json:"uid"`
+				} `json:"ownerReferences"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal([]byte(raw), &claims); err != nil {
+		t.Fatalf("decode ResourceClaims: %v", err)
+	}
+	var matches []string
+	for _, claim := range claims.Items {
+		if claim.Metadata.Annotations["resource.kubernetes.io/extended-resource-claim"] != "true" {
+			continue
+		}
+		for _, owner := range claim.Metadata.OwnerReferences {
+			if owner.UID == podUID {
+				matches = append(matches, claim.Metadata.Name)
+			}
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("scheduler-generated ResourceClaims for Pod %s = %v, want one", pod, matches)
+	}
+	return matches[0]
 }
 
 func TestTwoVPPInstancesReceiveExclusiveDPDKDevices(t *testing.T) {
@@ -284,29 +319,17 @@ spec:
 
 func vppMultiDeviceManifest(node string) string {
 	return fmt.Sprintf(`apiVersion: resource.k8s.io/v1
-kind: ResourceClaimTemplate
+kind: DeviceClass
 metadata:
   name: %[1]s
 spec:
-  spec:
-    devices:
-      requests:
-        - name: dpdk
-          exactly:
-            deviceClassName: linux-net-dpdk
-            allocationMode: ExactCount
-            count: 2
-            selectors:
-              - cel:
-                  expression: >-
-                    device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
-                    device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
-      config:
-        - requests: ["dpdk"]
-          opaque:
-            driver: linux-net.dra.infinitydon.com
-            parameters:
-              type: dpdk
+  selectors:
+    - cel:
+        expression: >-
+          device.driver == 'linux-net.dra.infinitydon.com' &&
+          device.attributes['linux-net.dra.infinitydon.com'].dpdk == true &&
+          device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
+          device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
 ---
 apiVersion: v1
 kind: Pod
@@ -316,9 +339,6 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %[3]s
   restartPolicy: Always
-  resourceClaims:
-    - name: dpdk
-      resourceClaimTemplateName: %[1]s
   containers:
     - name: vpp
       image: %[4]s
@@ -367,12 +387,12 @@ spec:
           cpu: "3"
           memory: 768Mi
           hugepages-1Gi: 2Gi
+          deviceclass.resource.kubernetes.io/%[1]s: "2"
         limits:
           cpu: "3"
           memory: 768Mi
           hugepages-1Gi: 2Gi
-        claims:
-          - name: dpdk
+          deviceclass.resource.kubernetes.io/%[1]s: "2"
       volumeMounts:
         - name: hugepages
           mountPath: /dev/hugepages
@@ -384,5 +404,5 @@ spec:
         medium: HugePages
     - name: run
       emptyDir: {}
-`, vppMultiTemplate, vppMultiPod, node, vppImage)
+`, vppMultiClass, vppMultiPod, node, vppImage)
 }

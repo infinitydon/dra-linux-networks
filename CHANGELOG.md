@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.5
+
+- Use the Kubernetes 1.36+ DRA-backed extended-resource API for simple DPDK device counts.
+- Request two Intel VF DPDK devices directly from the VPP Pod, using DeviceClass selectors without a ResourceClaimTemplate.
+- Verify the scheduler-generated claim, two CDI devices, and VPP hardware initialization in e2e tests.
+
 ## v0.3.4
 
 - Add deterministic VPP interface addresses and bidirectional ping validation to the two-instance DPDK example.
