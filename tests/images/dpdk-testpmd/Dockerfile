@@ -9,6 +9,7 @@ RUN apt-get update && \
 ARG DPDK_VERSION=v26.03
 RUN git clone --branch "${DPDK_VERSION}" --depth 1 https://github.com/DPDK/dpdk.git /src/dpdk && \
     meson setup /src/dpdk/build /src/dpdk \
+      -Dplatform=generic \
       -Ddefault_library=static \
       -Dtests=false \
       -Dexamples= && \
