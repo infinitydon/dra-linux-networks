@@ -7,6 +7,7 @@
 - Key persisted allocations by claim, device, and share ID so repeated shared-parent claims cannot overwrite each other.
 - Migrate existing persisted device keys during startup.
 - Add a same-template-twice macvlan example and focused naming and storage tests.
+- Add live e2e coverage for two shared claims from one reusable template.
 
 ## v0.4.0
 

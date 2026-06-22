@@ -22,6 +22,16 @@ make test-e2e-multi-node \
   DYNAMIC_NODE=ebpf-bng-node-02
 ```
 
+Run the repeated-template naming test on a worker that advertises `enp8s20`:
+
+```bash
+make test-e2e-repeated-network DYNAMIC_NODE=ebpf-bng-node-02
+```
+
+The test references one ResourceClaimTemplate twice from one Pod and verifies
+two claims, two shared allocations, distinct IPs, and interfaces `net1` and
+`net2`.
+
 Run the exclusive host-device pool lifecycle test on the worker with the
 configured NIC list:
 
