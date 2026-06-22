@@ -5,6 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	resourceapi "k8s.io/api/resource/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 
@@ -13,6 +17,39 @@ import (
 
 type capturingHelper struct {
 	resources resourceslice.DriverResources
+}
+
+func TestPodInterfaceNameIncrementsAndSupportsClaimOverride(t *testing.T) {
+	store, err := NewStore("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	driver := &Driver{store: store}
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		UID: types.UID("pod-uid"),
+		Annotations: map[string]string{
+			AttrPrefix + "/network-b.interface-name": "storage0",
+		},
+	}}
+	claimA := &resourceapi.ResourceClaim{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{PodClaimNameAnnotation: "network-a"}}}
+	claimB := &resourceapi.ResourceClaim{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{PodClaimNameAnnotation: "network-b"}}}
+
+	name, err := driver.podInterfaceName(pod, claimA, "net1", "claim-a/enp8s20", "net1")
+	if err != nil || name != "net1" {
+		t.Fatalf("first interface = %q, err = %v", name, err)
+	}
+	if err := store.SetDevice(pod.UID, "claim-a/enp8s20", DeviceConfig{Network: NetworkConfig{Type: "macvlan", InterfaceName: name}}); err != nil {
+		t.Fatal(err)
+	}
+
+	name, err = driver.podInterfaceName(pod, &resourceapi.ResourceClaim{}, "net1", "claim-b/enp8s20", "net1")
+	if err != nil || name != "net2" {
+		t.Fatalf("incremented interface = %q, err = %v", name, err)
+	}
+	name, err = driver.podInterfaceName(pod, claimB, "net1", "claim-b/enp8s20", "net1")
+	if err != nil || name != "storage0" {
+		t.Fatalf("overridden interface = %q, err = %v", name, err)
+	}
 }
 
 func (h *capturingHelper) PublishResources(_ context.Context, resources resourceslice.DriverResources) error {

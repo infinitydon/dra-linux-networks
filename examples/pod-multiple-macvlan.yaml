@@ -1,0 +1,48 @@
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: linux-net-reusable-macvlan
+spec:
+  spec:
+    devices:
+      requests:
+        - name: net1
+          exactly:
+            deviceClassName: linux-net-macvlan
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes['linux-net.dra.infinitydon.com'].interface == 'enp8s20'
+      config:
+        - requests: ["net1"]
+          opaque:
+            driver: linux-net.dra.infinitydon.com
+            parameters:
+              type: macvlan
+              mode: bridge
+              interfaceName: net1
+              mtu: 9000
+              ipPool: lan-88
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: linux-net-multiple-macvlan
+  # To override only the second attachment, uncomment:
+  # annotations:
+  #   linux-net.dra.infinitydon.com/network-b.interface-name: storage0
+spec:
+  restartPolicy: Never
+  resourceClaims:
+    - name: network-a
+      resourceClaimTemplateName: linux-net-reusable-macvlan
+    - name: network-b
+      resourceClaimTemplateName: linux-net-reusable-macvlan
+  containers:
+    - name: shell
+      image: nicolaka/netshoot:v0.15@sha256:47b907d662d139d1e2f22bfe14f4efca1e3f1feed283572f47c970c780c03b61
+      command: ["sleep", "3600"]
+      resources:
+        claims:
+          - name: network-a
+          - name: network-b

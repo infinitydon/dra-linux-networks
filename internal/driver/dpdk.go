@@ -27,7 +27,7 @@ type dpdkDevice struct {
 	State DPDKDeviceState
 }
 
-func (d *Driver) prepareDPDKDevice(ctx context.Context, claim *resourceapi.ResourceClaim, pod *corev1.Pod, podUID types.UID, allocation resourceapi.DeviceRequestAllocationResult, device dpdkDevice) (kubeletplugin.Device, error) {
+func (d *Driver) prepareDPDKDevice(ctx context.Context, claim *resourceapi.ResourceClaim, pod *corev1.Pod, podUID types.UID, storageKey string, allocation resourceapi.DeviceRequestAllocationResult, device dpdkDevice) (kubeletplugin.Device, error) {
 	userCfg, err := d.configForRequest(claim, allocation.Request)
 	if err != nil {
 		return kubeletplugin.Device{}, err
@@ -62,7 +62,7 @@ func (d *Driver) prepareDPDKDevice(ctx context.Context, claim *resourceapi.Resou
 		Network:        NetworkConfig{Type: "dpdk"},
 		LifecycleState: "Prepared",
 	}
-	if err := d.store.SetDevice(podUID, allocation.Device, cfg); err != nil {
+	if err := d.store.SetDevice(podUID, storageKey, cfg); err != nil {
 		_ = os.Remove(specPath)
 		return kubeletplugin.Device{}, fmt.Errorf("persist DPDK device: %w", err)
 	}

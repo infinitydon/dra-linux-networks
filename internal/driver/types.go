@@ -34,6 +34,7 @@ const (
 	AttrNUMANode          = AttrPrefix + "/numaNode"
 	AttrStandardPCIBusID  = "resource.kubernetes.io/pciBusID"
 	AttrStandardPCIeRoot  = "resource.kubernetes.io/pcieRoot"
+	PodClaimNameAnnotation = "resource.kubernetes.io/pod-claim-name"
 )
 
 type InterfaceIdentity struct {

@@ -3,6 +3,7 @@ package driver
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -60,7 +61,38 @@ func NewStore(path string) (*Store, error) {
 	if s.IPAllocations == nil {
 		s.IPAllocations = map[types.UID]IPAllocation{}
 	}
+	if s.migrateDeviceKeys() && s.path != "" {
+		if err := s.persistLocked(); err != nil {
+			return nil, err
+		}
+	}
 	return s, nil
+}
+
+func deviceStoreKey(claimUID types.UID, deviceName string, shareID *string) string {
+	key := fmt.Sprintf("%s/%s", claimUID, deviceName)
+	if shareID != nil && *shareID != "" {
+		key += "/" + *shareID
+	}
+	return key
+}
+
+func (s *Store) migrateDeviceKeys() bool {
+	changed := false
+	for podUID, pod := range s.Pods {
+		devices := make(map[string]DeviceConfig, len(pod.Devices))
+		for oldKey, cfg := range pod.Devices {
+			key := oldKey
+			if cfg.ClaimUID != "" && cfg.DeviceName != "" {
+				key = deviceStoreKey(cfg.ClaimUID, cfg.DeviceName, cfg.ShareID)
+			}
+			devices[key] = cfg
+			changed = changed || key != oldKey
+		}
+		pod.Devices = devices
+		s.Pods[podUID] = pod
+	}
+	return changed
 }
 
 func (s *Store) SetDevice(podUID types.UID, deviceName string, cfg DeviceConfig) error {

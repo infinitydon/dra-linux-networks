@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,7 @@ type Driver struct {
 	store       *Store
 	devices     map[string]config.InterfaceConfig
 	dpdkMu      sync.RWMutex
+	prepareMu   sync.Mutex
 	dpdkDevices map[string]dpdkDevice
 	ipPools     map[string]config.IPPool
 }
@@ -377,7 +379,78 @@ func podStaticAddress(annotations map[string]string, request, interfaceName, exp
 	return "", nil
 }
 
+func (d *Driver) podInterfaceName(pod *corev1.Pod, claim *resourceapi.ResourceClaim, request, storageKey, configured string) (string, error) {
+	if existingPod, ok := d.store.GetPod(pod.UID); ok {
+		if existing, found := existingPod.Devices[storageKey]; found && existing.Network.InterfaceName != "" {
+			return existing.Network.InterfaceName, nil
+		}
+	}
+
+	used := map[string]bool{}
+	if existingPod, ok := d.store.GetPod(pod.UID); ok {
+		for _, existing := range existingPod.Devices {
+			if existing.Network.InterfaceName != "" {
+				used[existing.Network.InterfaceName] = true
+			}
+		}
+	}
+
+	podClaimName := strings.TrimSpace(claim.Annotations[PodClaimNameAnnotation])
+	for _, reference := range []string{podClaimName, request} {
+		if reference == "" {
+			continue
+		}
+		key := AttrPrefix + "/" + reference + ".interface-name"
+		if override := strings.TrimSpace(pod.Annotations[key]); override != "" {
+			if err := validatePodInterfaceName(override); err != nil {
+				return "", fmt.Errorf("pod annotation %s: %w", key, err)
+			}
+			if used[override] {
+				return "", fmt.Errorf("pod annotation %s requests interface name %q which is already in use", key, override)
+			}
+			return override, nil
+		}
+	}
+
+	if configured == "" {
+		configured = "net1"
+	}
+	if err := validatePodInterfaceName(configured); err != nil {
+		return "", err
+	}
+	if !used[configured] {
+		return configured, nil
+	}
+	if !strings.HasPrefix(configured, "net") {
+		return "", fmt.Errorf("pod interface name %q is already in use; set a claim-specific .interface-name annotation", configured)
+	}
+	start, err := strconv.Atoi(strings.TrimPrefix(configured, "net"))
+	if err != nil || start < 1 {
+		return "", fmt.Errorf("pod interface name %q is already in use; set a claim-specific .interface-name annotation", configured)
+	}
+	for index := start + 1; index < 10000; index++ {
+		candidate := "net" + strconv.Itoa(index)
+		if !used[candidate] {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no available incremental interface name after %q", configured)
+}
+
+func validatePodInterfaceName(name string) error {
+	if name == "" || len(name) > 15 {
+		return fmt.Errorf("interface name %q must contain 1 to 15 bytes", name)
+	}
+	if name == "." || name == ".." || strings.ContainsAny(name, "/: \t\r\n") {
+		return fmt.Errorf("interface name %q contains unsupported characters", name)
+	}
+	return nil
+}
+
 func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
+	d.prepareMu.Lock()
+	defer d.prepareMu.Unlock()
+
 	if len(claim.Status.ReservedFor) == 0 {
 		return kubeletplugin.PrepareResult{}
 	}
@@ -405,8 +478,14 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 		if !ok && !dpdkOK {
 			return kubeletplugin.PrepareResult{Err: fmt.Errorf("allocated unknown device %q", allocation.Device)}
 		}
+		var shareID *string
+		if allocation.ShareID != nil {
+			value := string(*allocation.ShareID)
+			shareID = &value
+		}
+		storageKey := deviceStoreKey(claim.UID, allocation.Device, shareID)
 		if dpdkOK {
-			preparedDevice, err := d.prepareDPDKDevice(ctx, claim, pod, reserved.UID, allocation, dpdk)
+			preparedDevice, err := d.prepareDPDKDevice(ctx, claim, pod, reserved.UID, storageKey, allocation, dpdk)
 			if err != nil {
 				return kubeletplugin.PrepareResult{Err: err}
 			}
@@ -428,6 +507,13 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 		if netCfg.Type == "host-device" && netCfg.InterfaceName == "" {
 			netCfg.InterfaceName = ifc.Name
 		}
+		if netCfg.Type == "macvlan" || netCfg.Type == "ipvlan" {
+			name, err := d.podInterfaceName(pod, claim, allocation.Request, storageKey, netCfg.InterfaceName)
+			if err != nil {
+				return kubeletplugin.PrepareResult{Err: err}
+			}
+			netCfg.InterfaceName = name
+		}
 		address, err := podStaticAddress(pod.Annotations, allocation.Request, netCfg.InterfaceName, netCfg.IPPool)
 		if err != nil {
 			return kubeletplugin.PrepareResult{Err: err}
@@ -442,11 +528,6 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			return kubeletplugin.PrepareResult{Err: err}
 		}
 
-		var shareID *string
-		if allocation.ShareID != nil {
-			value := string(*allocation.ShareID)
-			shareID = &value
-		}
 		deviceCfg := DeviceConfig{
 			Claim:            types.NamespacedName{Namespace: claim.Namespace, Name: claim.Name},
 			ClaimUID:         claim.UID,
@@ -461,7 +542,7 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 		}
 		if netCfg.Type == "host-device" {
 			if existingPod, ok := d.store.GetPod(types.UID(reserved.UID)); ok {
-				if existing, found := existingPod.Devices[allocation.Device]; found && existing.ClaimUID == claim.UID && existing.HostDevice != nil {
+				if existing, found := existingPod.Devices[storageKey]; found && existing.ClaimUID == claim.UID && existing.HostDevice != nil {
 					deviceCfg = existing
 				}
 			}
@@ -482,7 +563,7 @@ func (d *Driver) prepareClaim(ctx context.Context, claim *resourceapi.ResourceCl
 			}
 		}
 		deviceCfg.LifecycleState = "Prepared"
-		if err := d.store.SetDevice(types.UID(reserved.UID), allocation.Device, deviceCfg); err != nil {
+		if err := d.store.SetDevice(types.UID(reserved.UID), storageKey, deviceCfg); err != nil {
 			return kubeletplugin.PrepareResult{Err: fmt.Errorf("persist pod config: %w", err)}
 		}
 		preparedMessage := networkPreparedMessage(deviceCfg)

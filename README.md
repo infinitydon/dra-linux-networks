@@ -97,6 +97,31 @@ sysfs device hierarchy and use Kubernetes' `pci<domain>:<bus>` format. Devices
 without resolvable PCI ancestry do not advertise these attributes and cannot
 satisfy claims that require PCIe-root alignment.
 
+The same ResourceClaimTemplate may also be referenced more than once by one
+Pod. For macvlan and ipvlan attachments, the first available configured name is
+kept and collisions are incremented deterministically (`net1`, `net2`, ...).
+The `examples/pod-multiple-macvlan.yaml` workload demonstrates two claims from
+one reusable template.
+
+A Pod can override an individual attachment by using its `spec.resourceClaims`
+name in an annotation:
+
+```yaml
+metadata:
+  annotations:
+    linux-net.dra.infinitydon.com/network-b.interface-name: storage0
+spec:
+  resourceClaims:
+    - name: network-a
+      resourceClaimTemplateName: linux-net-reusable-macvlan
+    - name: network-b
+      resourceClaimTemplateName: linux-net-reusable-macvlan
+```
+
+Claim-specific overrides take precedence over the template's `interfaceName`.
+Names must be valid Linux interface names of at most 15 bytes and must be
+unique inside the Pod.
+
 The chart installs the `IPPool` CRD but does not create any pool instances.
 The example pool is operator-owned and contains:
 

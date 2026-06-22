@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.0
+
+- Allocate collision-free incremental `net1`, `net2`, and later names when a Pod reuses a macvlan or ipvlan template.
+- Add claim-specific Pod annotations for overriding individual interface names.
+- Key persisted allocations by claim, device, and share ID so repeated shared-parent claims cannot overwrite each other.
+- Migrate existing persisted device keys during startup.
+- Add a same-template-twice macvlan example and focused naming and storage tests.
+
 ## v0.4.0
 
 - Discover PCI function and root-complex topology from nested sysfs paths, including virtio netdevices.
