@@ -52,9 +52,11 @@ go test -tags=e2e ./tests/e2e -v -args \
   -dpdk-node ebpf-bng-node-01
 ```
 
-VFIO no-IOMMU devices require `dpdk.allowUnsafeNoIOMMU=true` in the Helm
-release. This mode does not provide DMA isolation and is intended only for
-explicitly trusted lab nodes.
+VFIO no-IOMMU devices require both `dpdk.allowUnsafeNoIOMMU=true` and an
+explicit `dpdk.include.pciAddresses` allow-list in the Helm release. This mode
+does not provide DMA isolation and is intended only for explicitly trusted lab
+nodes. The example cluster values in `examples/values-netdevices.yaml` list the
+seven known DPDK BDFs on `ebpf-bng-node-01`.
 
 Run two independent VPP 25.10 instances and verify that DRA assigns a distinct
 Intel VF and VFIO group to each Pod, configures `192.168.88.20/24` and

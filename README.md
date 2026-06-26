@@ -29,7 +29,7 @@ The target lab cluster was checked before implementation:
 - DRA API: `resource.k8s.io/v1`
 - Runtime: MicroK8s containerd `v2.2.3`
 - NRI: enabled with socket `/var/run/nri/nri.sock`
-- Worker node for this driver: `ebpf-bng-node-01`
+- Worker nodes for this driver: `ebpf-bng-node-01`, `ebpf-bng-node-02`
 - Lab test parent interface: `enp8s20`
 
 The control-plane node is intentionally excluded by using a node label selector.
@@ -40,10 +40,11 @@ Versioned source and packaged Helm charts are published on the
 [GitHub Releases page](https://github.com/infinitydon/dra-linux-networks/releases).
 Container images are published at `ghcr.io/infinitydon/dra-linux-networks`.
 
-Label the worker node that should advertise Linux network DRA resources:
+Label the worker nodes that should advertise Linux network DRA resources:
 
 ```bash
 kubectl label node ebpf-bng-node-01 linux-net.dra.infinitydon.com/enabled=true
+kubectl label node ebpf-bng-node-02 linux-net.dra.infinitydon.com/enabled=true
 ```
 
 Create an operator-owned values file that lists only the interfaces which may
@@ -79,10 +80,10 @@ host-device assignment. The two policies cannot be mixed on one physical NIC.
 The driver publishes kernel driver, bus type, PCI address/vendor/device IDs,
 MAC, MTU, and link state as ResourceSlice attributes for CEL selection.
 
-The example-cluster inventory defines `enp8s20` as a shared parent and
-`enp8s21`/`enp8s22` as exclusive host-device NICs. A workload can pin its
-macvlan parent with a CEL selector; see
-`examples/resourceclaimtemplate-macvlan-specific-parent.yaml`.
+The example-cluster inventory defines `enp8s20` as a shared parent,
+`enp8s21`/`enp8s22` as exclusive host-device NICs, and seven node-01 DPDK PCI
+functions selected by explicit BDF. A workload can pin its macvlan parent with
+a CEL selector; see `examples/resourceclaimtemplate-macvlan-specific-parent.yaml`.
 
 A single ResourceClaimTemplate can request several device types. The
 `examples/deployment-macvlan-dpdk.yaml` workload creates one claim containing a
@@ -224,19 +225,28 @@ master are rejected unless the operator explicitly sets `allowUnsafe: true`.
 
 ## DPDK devices
 
-DPDK inventory is discovered from PCI sysfs. Operators define safety filters,
-not a static PCI address inventory:
+DPDK inventory is discovered from PCI sysfs. Operators define safety filters.
+For safe IOMMU-backed VFIO, vendor/device/class filters may be enough. For
+unsafe VFIO no-IOMMU, the driver requires an explicit PCI-address allow-list so
+new or management-path NICs are not advertised accidentally:
 
 ```yaml
 dpdk:
   enabled: true
-  allowUnsafeNoIOMMU: false
+  allowUnsafeNoIOMMU: true
   allowedKernelDrivers: [vfio-pci]
   pciClasses: ["0200"]
   include:
     vendors: []
     devices: []
-    pciAddresses: []
+    pciAddresses:
+      - "0000:01:00.0"
+      - "0000:02:00.0"
+      - "0000:03:00.0"
+      - "0000:04:00.0"
+      - "0000:05:00.0"
+      - "0000:09:03.0"
+      - "0000:09:04.0"
   exclude:
     pciAddresses: []
   compatibleDriverOverrides:
@@ -252,9 +262,10 @@ The driver publishes each eligible PCI function as an exclusive DRA device and
 reports its BDF, numeric IDs, manufacturer/model, current and compatible kernel
 drivers, NUMA node, IOMMU group and IOMMU mode. `allowedKernelDrivers` is the
 allow-list for currently bound host kernel drivers that are considered
-DPDK-eligible. PCI addresses are optional
-include/exclude filters. Kernel driver candidates come from the device modalias
-and the host's `modules.alias`; overrides handle ambiguous devices.
+DPDK-eligible. PCI addresses are optional include/exclude filters in normal
+IOMMU mode and required include filters when `allowUnsafeNoIOMMU` is true.
+Kernel driver candidates come from the device modalias and the host's
+`modules.alias`; overrides handle ambiguous devices.
 
 VFIO allocation is conservative: a function is published only when it is the
 sole member of its IOMMU group. This prevents separate claims from sharing one
@@ -274,9 +285,13 @@ limited to explicitly trusted lab nodes. Unsafe no-IOMMU mode requires
 VFIO-bound Ethernet device on a node. The driver maps host
 `/dev/vfio/noiommu-N` to `/dev/vfio/N` inside the workload.
 
-Run the project-owned testpmd workload after enabling DPDK discovery:
+Run the project-owned testpmd workload after enabling DPDK discovery with an
+explicit safe inventory, for example `examples/values-netdevices.yaml`:
 
 ```bash
+helm upgrade --install linux-net-dra ./deployments/helm/linux-net-dra \
+  --namespace kube-system \
+  --values examples/values-netdevices.yaml
 kubectl apply -f examples/deployment-dpdk-testpmd.yaml
 kubectl logs -l app=linux-net-dpdk-testpmd
 ```

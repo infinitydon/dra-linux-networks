@@ -34,6 +34,8 @@ interfaces:
     allowUnsafe: false
 
 # DPDK PCI discovery is independent of the interface list and is opt-in.
+# This lab uses VFIO no-IOMMU, so every advertised PCI function must be listed
+# explicitly. Do not replace this with broad vfio-pci discovery on shared hosts.
 dpdk:
   enabled: true
   allowUnsafeNoIOMMU: true
