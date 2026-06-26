@@ -269,7 +269,9 @@ the driver rejects IPAM, gateway, route, interface-name and MTU fields.
 
 Safe IOMMU-backed VFIO is the default. VFIO no-IOMMU devices are advertised only
 with `allowUnsafeNoIOMMU: true`; this provides no DMA isolation and should be
-limited to explicitly trusted lab nodes. The driver maps host
+limited to explicitly trusted lab nodes. Unsafe no-IOMMU mode requires
+`include.pciAddresses` so operators cannot accidentally advertise every
+VFIO-bound Ethernet device on a node. The driver maps host
 `/dev/vfio/noiommu-N` to `/dev/vfio/N` inside the workload.
 
 Run the project-owned testpmd workload after enabling DPDK discovery:

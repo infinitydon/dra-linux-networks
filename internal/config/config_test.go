@@ -113,3 +113,34 @@ func TestDPDKAllowedKernelDriversSupportsLegacyAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestDPDKUnsafeNoIOMMURequiresExplicitPCIAddresses(t *testing.T) {
+	tests := []struct {
+		name      string
+		dpdk      string
+		wantError bool
+	}{
+		{name: "unsafe without include is rejected", dpdk: `{"enabled":true,"allowUnsafeNoIOMMU":true}`, wantError: true},
+		{name: "unsafe with vendor include is rejected", dpdk: `{"enabled":true,"allowUnsafeNoIOMMU":true,"include":{"vendors":["8086"]}}`, wantError: true},
+		{name: "unsafe with pci include is accepted", dpdk: `{"enabled":true,"allowUnsafeNoIOMMU":true,"include":{"pciAddresses":["0000:05:00.0"]}}`},
+		{name: "safe iommu mode can use discovery filters", dpdk: `{"enabled":true,"allowUnsafeNoIOMMU":false}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(`{"dpdk":`+test.dpdk+`}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(path)
+			if test.wantError {
+				if err == nil || !strings.Contains(err.Error(), "allowUnsafeNoIOMMU requires explicit") {
+					t.Fatalf("error = %v, want explicit unsafe no-IOMMU error", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.2
+
+- Reject unsafe DPDK no-IOMMU mode unless operators explicitly list allowed PCI addresses.
+- Document the no-IOMMU blast-radius guardrail for lab clusters and hypervisor-backed nodes.
+
 ## v0.5.1
 
 - Rename the DPDK host-driver allow-list to `allowedKernelDrivers` and keep `drivers` as a backwards-compatible alias.

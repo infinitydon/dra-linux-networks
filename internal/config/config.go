@@ -91,6 +91,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.DPDK.Enabled {
 		setDPDKDefaults(&cfg.DPDK)
+		if cfg.DPDK.AllowUnsafeNoIOMMU && len(cfg.DPDK.Include.PCIAddresses) == 0 {
+			return nil, fmt.Errorf("dpdk.allowUnsafeNoIOMMU requires explicit dpdk.include.pciAddresses")
+		}
 	}
 	for i := range cfg.Interfaces {
 		if cfg.Interfaces[i].Name == "" {

@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.5.1"
+  tag: "0.5.2"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -41,6 +41,9 @@ state:
 # Enable this only on labeled nodes prepared with a supported userspace driver.
 dpdk:
   enabled: false
+  # Unsafe no-IOMMU mode is rejected unless include.pciAddresses is set.
+  # Never enable broad no-IOMMU discovery on nodes that share NICs with host or
+  # hypervisor management paths.
   allowUnsafeNoIOMMU: false
   sysfsPath: /host/sys
   devPath: /host/dev
