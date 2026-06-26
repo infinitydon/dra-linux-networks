@@ -31,11 +31,6 @@ spec:
               interfaceName: net1
               mtu: 9000
               ipPool: lan-88
-        - requests: ["dpdk"]
-          opaque:
-            driver: linux-net.dra.infinitydon.com
-            parameters:
-              type: dpdk
       constraints:
         - requests: ["net1", "dpdk"]
           matchAttribute: resource.kubernetes.io/pcieRoot

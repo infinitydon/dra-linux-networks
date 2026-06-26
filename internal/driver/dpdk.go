@@ -110,7 +110,7 @@ func discoverDPDKDevices(cfg config.DPDKConfig) (map[string]dpdkDevice, error) {
 		device := trimHexFile(filepath.Join(devicePath, "device"))
 		class := trimHexFile(filepath.Join(devicePath, "class"))
 		driver := symlinkBase(filepath.Join(devicePath, "driver"))
-		if !slices.Contains(cfg.Drivers, strings.ToLower(driver)) || !classAllowed(class, cfg.PCIClasses) {
+		if !slices.Contains(cfg.AllowedKernelDrivers, strings.ToLower(driver)) || !classAllowed(class, cfg.PCIClasses) {
 			continue
 		}
 		if !selectorAllows(cfg.Include, address, vendor, device, true) || selectorAllows(cfg.Exclude, address, vendor, device, false) {

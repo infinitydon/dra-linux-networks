@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/infinitydon/dra-linux-networks
-  tag: "0.5.0"
+  tag: "0.5.1"
   pullPolicy: IfNotPresent
 
 driverName: linux-net.dra.infinitydon.com
@@ -48,7 +48,9 @@ dpdk:
   cdiPath: /var/run/cdi
   pciIDPath: /usr/share/misc/pci.ids
   modulesPath: /host/lib/modules
-  drivers:
+  # Currently bound host kernel drivers that should be advertised as DPDK-ready.
+  # Add uio_pci_generic or igb_uio here if your nodes use UIO instead of VFIO.
+  allowedKernelDrivers:
     - vfio-pci
   pciClasses:
     - "0200"

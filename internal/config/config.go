@@ -25,7 +25,8 @@ type DPDKConfig struct {
 	CDIPath                   string              `json:"cdiPath"`
 	PCIIDPath                 string              `json:"pciIDPath"`
 	ModulesPath               string              `json:"modulesPath"`
-	Drivers                   []string            `json:"drivers"`
+	AllowedKernelDrivers      []string            `json:"allowedKernelDrivers"`
+	Drivers                   []string            `json:"drivers,omitempty"`
 	PCIClasses                []string            `json:"pciClasses"`
 	Include                   PCISelector         `json:"include"`
 	Exclude                   PCISelector         `json:"exclude"`
@@ -177,15 +178,20 @@ func setDPDKDefaults(cfg *DPDKConfig) {
 	if cfg.ModulesPath == "" {
 		cfg.ModulesPath = "/host/lib/modules"
 	}
-	if len(cfg.Drivers) == 0 {
-		cfg.Drivers = []string{"vfio-pci"}
+	if len(cfg.AllowedKernelDrivers) == 0 {
+		cfg.AllowedKernelDrivers = cfg.Drivers
 	}
+	if len(cfg.AllowedKernelDrivers) == 0 {
+		cfg.AllowedKernelDrivers = []string{"vfio-pci"}
+	}
+	cfg.Drivers = cfg.AllowedKernelDrivers
 	if cfg.PCIClasses == nil {
 		cfg.PCIClasses = []string{"0200"}
 	}
-	for i := range cfg.Drivers {
-		cfg.Drivers[i] = normalize(cfg.Drivers[i])
+	for i := range cfg.AllowedKernelDrivers {
+		cfg.AllowedKernelDrivers[i] = normalize(cfg.AllowedKernelDrivers[i])
 	}
+	cfg.Drivers = cfg.AllowedKernelDrivers
 	for i := range cfg.PCIClasses {
 		cfg.PCIClasses[i] = normalize(cfg.PCIClasses[i])
 	}

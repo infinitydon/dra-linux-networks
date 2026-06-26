@@ -198,12 +198,6 @@ spec:
                   expression: >-
                     device.attributes['linux-net.dra.infinitydon.com'].pciVendorID == '8086' &&
                     device.attributes['linux-net.dra.infinitydon.com'].pciDeviceID == '154c'
-      config:
-        - requests: ["dpdk"]
-          opaque:
-            driver: linux-net.dra.infinitydon.com
-            parameters:
-              type: dpdk
 ---
 apiVersion: v1
 kind: Service

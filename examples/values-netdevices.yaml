@@ -36,3 +36,5 @@ interfaces:
 # DPDK PCI discovery is independent of the interface list and is opt-in.
 dpdk:
   enabled: false
+  allowedKernelDrivers:
+    - vfio-pci

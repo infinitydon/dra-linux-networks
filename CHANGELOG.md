@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.1
+
+- Rename the DPDK host-driver allow-list to `allowedKernelDrivers` and keep `drivers` as a backwards-compatible alias.
+- Filter DPDK discovery using the canonical allowed kernel driver list.
+- Remove redundant DPDK opaque claim config from examples and e2e manifests.
+- Clarify that DPDK requests are selected by DeviceClass, selectors, counts, and constraints.
+
 ## v0.5.0
 
 - Allocate collision-free incremental `net1`, `net2`, and later names when a Pod reuses a macvlan or ipvlan template.

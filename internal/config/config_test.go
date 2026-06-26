@@ -82,3 +82,34 @@ func TestDPDKPCIClassDefaultDistinguishesOmittedAndEmpty(t *testing.T) {
 		})
 	}
 }
+
+func TestDPDKAllowedKernelDriversSupportsLegacyAlias(t *testing.T) {
+	tests := []struct {
+		name    string
+		dpdk    string
+		want    string
+		legacy  string
+	}{
+		{name: "default", dpdk: `{"enabled":true}`, want: "vfio-pci", legacy: "vfio-pci"},
+		{name: "allowed kernel drivers", dpdk: `{"enabled":true,"allowedKernelDrivers":["VFIO-PCI","uio_pci_generic"]}`, want: "vfio-pci,uio_pci_generic", legacy: "vfio-pci,uio_pci_generic"},
+		{name: "legacy drivers alias", dpdk: `{"enabled":true,"drivers":["igb_uio"]}`, want: "igb_uio", legacy: "igb_uio"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if err := os.WriteFile(path, []byte(`{"dpdk":`+test.dpdk+`}`), 0600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Join(cfg.DPDK.AllowedKernelDrivers, ","); got != test.want {
+				t.Fatalf("allowedKernelDrivers = %q, want %q", got, test.want)
+			}
+			if got := strings.Join(cfg.DPDK.Drivers, ","); got != test.legacy {
+				t.Fatalf("drivers alias = %q, want %q", got, test.legacy)
+			}
+		})
+	}
+}

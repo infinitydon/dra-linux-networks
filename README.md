@@ -231,7 +231,7 @@ not a static PCI address inventory:
 dpdk:
   enabled: true
   allowUnsafeNoIOMMU: false
-  drivers: [vfio-pci]
+  allowedKernelDrivers: [vfio-pci]
   pciClasses: ["0200"]
   include:
     vendors: []
@@ -250,7 +250,9 @@ include/exclude selectors.
 
 The driver publishes each eligible PCI function as an exclusive DRA device and
 reports its BDF, numeric IDs, manufacturer/model, current and compatible kernel
-drivers, NUMA node, IOMMU group and IOMMU mode. PCI addresses are optional
+drivers, NUMA node, IOMMU group and IOMMU mode. `allowedKernelDrivers` is the
+allow-list for currently bound host kernel drivers that are considered
+DPDK-eligible. PCI addresses are optional
 include/exclude filters. Kernel driver candidates come from the device modalias
 and the host's `modules.alias`; overrides handle ambiguous devices.
 
@@ -261,8 +263,9 @@ withheld until whole-group allocation is implemented.
 
 During claim preparation the driver writes a claim-specific CDI specification.
 Kubelet passes its CDI ID to the runtime, which injects `/dev/vfio/vfio` and the
-allocated group device. No network namespace interface is created and DPDK
-configuration rejects all IPAM, gateway, route, interface-name and MTU fields.
+allocated group device. No network namespace interface is created. DPDK requests
+normally do not need opaque claim configuration; if configuration is supplied,
+the driver rejects IPAM, gateway, route, interface-name and MTU fields.
 
 Safe IOMMU-backed VFIO is the default. VFIO no-IOMMU devices are advertised only
 with `allowUnsafeNoIOMMU: true`; this provides no DMA isolation and should be
@@ -328,7 +331,8 @@ driver intentionally does not rebind PCI devices.
 
 ## Claim Parameters
 
-Workloads pass network intent through DRA opaque configuration:
+Workloads pass macvlan, ipvlan, and host-device network intent through DRA
+opaque configuration:
 
 ```yaml
 opaque:
@@ -343,7 +347,7 @@ opaque:
 
 Supported fields:
 
-- `type`: `macvlan`, `ipvlan`, `host-device`, or `dpdk`
+- `type`: `macvlan`, `ipvlan`, or `host-device`
 - `mode`: macvlan `bridge`, `private`, `vepa`, `passthru`; ipvlan `l2`, `l3`, `l3s`
 - `interfaceName`: interface name inside the pod, default `net1`
 - `mtu`: pod interface MTU
@@ -352,6 +356,10 @@ Supported fields:
 - `addresses`: direct static addresses in CIDR notation, mostly for testing or advanced use
 - `gateway`: default IPv4 gateway
 - `routes`: additional routes with `destination` and `gateway`
+
+DPDK requests are selected through the `DeviceClass`, CEL selectors, count, and
+constraints. They omit opaque configuration unless a future DPDK-specific option
+is added.
 
 When `ipPool` is set and `address` is omitted, the driver reserves the next
 free address from `spec.allocations`, skipping any address in `spec.reservations`.
